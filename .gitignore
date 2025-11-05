@@ -1,1 +1,6 @@
 /workdir
+
+# Local Claude Code configuration files
+.claude/
+CLAUDE.md
+CONTEXT.md

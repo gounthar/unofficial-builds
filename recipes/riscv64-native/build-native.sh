@@ -127,14 +127,18 @@ echo "Copying build script to remote machine..."
 scp ${SSH_OPTS} /tmp/remote-build-$$.sh "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_BUILD_DIR}/staging/build.sh"
 rm /tmp/remote-build-$$.sh
 
-# Define remote paths
-REMOTE_LOG="${REMOTE_BUILD_DIR}/logs/build-${fullversion}.log"
-REMOTE_PID="${REMOTE_BUILD_DIR}/logs/build-${fullversion}.pid"
-REMOTE_STATUS="${REMOTE_BUILD_DIR}/logs/build-${fullversion}.status"
+# Define remote paths (relative to REMOTE_BUILD_DIR for cd command)
+REMOTE_LOG="logs/build-${fullversion}.log"
+REMOTE_PID="logs/build-${fullversion}.pid"
+REMOTE_STATUS="logs/build-${fullversion}.status"
+# Absolute paths for retrieval
+REMOTE_LOG_ABS="${REMOTE_BUILD_DIR}/${REMOTE_LOG}"
+REMOTE_PID_ABS="${REMOTE_BUILD_DIR}/${REMOTE_PID}"
+REMOTE_STATUS_ABS="${REMOTE_BUILD_DIR}/${REMOTE_STATUS}"
 
 # Clean up any previous status files
 echo "Cleaning previous build status..."
-ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "rm -f ${REMOTE_STATUS}"
+ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "rm -f ${REMOTE_STATUS_ABS}"
 
 # Launch build in background with nohup
 echo "Launching build in detached mode..."
@@ -156,7 +160,7 @@ ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" \
 sleep 2
 
 # Get the PID
-BUILD_PID=$(ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "cat ${REMOTE_PID} 2>/dev/null || echo 'unknown'")
+BUILD_PID=$(ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "cat ${REMOTE_PID_ABS} 2>/dev/null || echo 'unknown'")
 echo "Build started with PID: ${BUILD_PID}"
 echo "Build running in background on ${REMOTE_HOST}"
 echo "You can disconnect safely - build will continue"
@@ -180,7 +184,7 @@ while true; do
 
       # Show last few lines of log
       echo "Last 3 lines from build log:"
-      ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "tail -3 ${REMOTE_LOG} 2>/dev/null || echo '(no log yet)'"
+      ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "tail -3 ${REMOTE_LOG_ABS} 2>/dev/null || echo '(no log yet)'"
       echo ""
     fi
 
@@ -194,10 +198,10 @@ done
 
 # Retrieve the full log
 echo "Retrieving build log..."
-scp ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_LOG}" "${output_dir}/build.log" || echo "Warning: Could not retrieve log"
+scp ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_LOG_ABS}" "${output_dir}/build.log" || echo "Warning: Could not retrieve log"
 
 # Check if build was successful
-if ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "[ -f ${REMOTE_STATUS} ] && grep -q SUCCESS ${REMOTE_STATUS}"; then
+if ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "[ -f ${REMOTE_STATUS_ABS} ] && grep -q SUCCESS ${REMOTE_STATUS_ABS}"; then
   echo "Build completed successfully!"
 else
   echo "ERROR: Build failed or did not complete successfully"

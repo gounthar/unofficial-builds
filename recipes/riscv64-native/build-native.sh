@@ -154,7 +154,7 @@ ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" \
     '${REMOTE_BUILD_DIR}' \
     '${REMOTE_LOG}' \
     '${REMOTE_PID}' \
-    > '${REMOTE_LOG}' 2>&1 & echo \$! > '${REMOTE_PID}'"
+    > ${REMOTE_LOG} 2>&1 & echo \$! > ${REMOTE_PID}"
 
 # Wait a moment for the build to start
 sleep 2

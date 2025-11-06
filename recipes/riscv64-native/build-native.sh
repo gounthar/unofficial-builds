@@ -46,7 +46,7 @@ fi
 
 # Ensure remote build directory exists
 echo "Setting up remote build directory..."
-ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "mkdir -p ${REMOTE_BUILD_DIR}/{staging,ccache,logs}"
+ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "mkdir -p ${REMOTE_BUILD_DIR}/staging ${REMOTE_BUILD_DIR}/ccache ${REMOTE_BUILD_DIR}/logs"
 
 # Copy source tarball to remote machine
 echo "Copying source tarball to remote machine..."

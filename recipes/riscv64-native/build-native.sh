@@ -131,10 +131,10 @@ rm /tmp/remote-build-$$.sh
 REMOTE_LOG="logs/build-${fullversion}.log"
 REMOTE_PID="logs/build-${fullversion}.pid"
 REMOTE_STATUS="logs/build-${fullversion}.status"
-# Absolute paths for retrieval
-REMOTE_LOG_ABS="${REMOTE_BUILD_DIR}/${REMOTE_LOG}"
-REMOTE_PID_ABS="${REMOTE_BUILD_DIR}/${REMOTE_PID}"
-REMOTE_STATUS_ABS="${REMOTE_BUILD_DIR}/${REMOTE_STATUS}"
+# Absolute paths for retrieval (use tilde for home directory)
+REMOTE_LOG_ABS="~/${REMOTE_BUILD_DIR}/${REMOTE_LOG}"
+REMOTE_PID_ABS="~/${REMOTE_BUILD_DIR}/${REMOTE_PID}"
+REMOTE_STATUS_ABS="~/${REMOTE_BUILD_DIR}/${REMOTE_STATUS}"
 
 # Clean up any previous status files
 echo "Cleaning previous build status..."

@@ -2,6 +2,7 @@
 
 # Native riscv64 build script - no Docker required
 # This script orchestrates a native build on a remote riscv64 machine via SSH
+# Resilient to SSH connection drops for long-running builds (12+ hours)
 
 set -e
 
@@ -24,8 +25,8 @@ REMOTE_HOST="${RISCV64_REMOTE_HOST:-192.168.1.185}"
 REMOTE_USER="${RISCV64_REMOTE_USER:-poddingue}"
 REMOTE_BUILD_DIR="${RISCV64_REMOTE_BUILD_DIR:-nodejs-builds}"
 
-# SSH options for non-interactive use
-SSH_OPTS="-o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=30"
+# SSH options for non-interactive use with keepalive to prevent timeouts
+SSH_OPTS="-o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=30 -o ServerAliveInterval=60 -o ServerAliveCountMax=30"
 
 echo "========================================"
 echo "Native riscv64 Build for Node.js ${fullversion}"
@@ -53,7 +54,7 @@ rsync -avz --progress -e "ssh ${SSH_OPTS}" \
   "${source_file}" \
   "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_BUILD_DIR}/staging/node.tar.xz"
 
-# Create remote build script
+# Create remote build script that runs detached
 cat > /tmp/remote-build-$$.sh <<'REMOTE_SCRIPT'
 #!/bin/bash
 set -e
@@ -67,6 +68,8 @@ COMMIT="$5"
 RELEASE_URLBASE="$6"
 CONFIG_FLAGS="$7"
 BUILD_DIR="$8"
+LOG_FILE="$9"
+PID_FILE="${10}"
 
 cd "${BUILD_DIR}/staging"
 
@@ -94,6 +97,8 @@ echo "Starting Node.js build..."
 echo "  CPU count: $(nproc)"
 echo "  Memory: $(free -h | grep Mem | awk '{print $2}')"
 echo "  Config flags: ${CONFIG_FLAGS}"
+echo "  Log file: ${LOG_FILE}"
+echo "  PID file: ${PID_FILE}"
 
 time make -j$(nproc) binary V= \
   DESTCPU="riscv64" \
@@ -112,16 +117,29 @@ ccache -s || true
 
 echo "Build completed successfully!"
 ls -lh node-*.tar.?z
+
+# Mark completion
+echo "SUCCESS" > "${BUILD_DIR}/logs/build-${FULLVERSION}.status"
 REMOTE_SCRIPT
 
-# Copy and execute build script on remote machine
-echo "Executing build on remote machine..."
+# Copy build script to remote machine
+echo "Copying build script to remote machine..."
 scp ${SSH_OPTS} /tmp/remote-build-$$.sh "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_BUILD_DIR}/staging/build.sh"
 rm /tmp/remote-build-$$.sh
 
-# Execute the build with proper quoting
+# Define remote paths
+REMOTE_LOG="${REMOTE_BUILD_DIR}/logs/build-${fullversion}.log"
+REMOTE_PID="${REMOTE_BUILD_DIR}/logs/build-${fullversion}.pid"
+REMOTE_STATUS="${REMOTE_BUILD_DIR}/logs/build-${fullversion}.status"
+
+# Clean up any previous status files
+echo "Cleaning previous build status..."
+ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "rm -f ${REMOTE_STATUS}"
+
+# Launch build in background with nohup
+echo "Launching build in detached mode..."
 ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" \
-  "bash ${REMOTE_BUILD_DIR}/staging/build.sh \
+  "cd ${REMOTE_BUILD_DIR} && nohup bash staging/build.sh \
     '${fullversion}' \
     '${disttype}' \
     '${customtag}' \
@@ -129,12 +147,61 @@ ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" \
     '${commit}' \
     '${release_urlbase}' \
     '${config_flags}' \
-    '${REMOTE_BUILD_DIR}'" \
-  2>&1 | tee "${output_dir}/build.log"
+    '${REMOTE_BUILD_DIR}' \
+    '${REMOTE_LOG}' \
+    '${REMOTE_PID}' \
+    > '${REMOTE_LOG}' 2>&1 & echo \$! > '${REMOTE_PID}'"
 
-# Check if build succeeded
-if [ ${PIPESTATUS[0]} -ne 0 ]; then
-  echo "ERROR: Remote build failed"
+# Wait a moment for the build to start
+sleep 2
+
+# Get the PID
+BUILD_PID=$(ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "cat ${REMOTE_PID} 2>/dev/null || echo 'unknown'")
+echo "Build started with PID: ${BUILD_PID}"
+echo "Build running in background on ${REMOTE_HOST}"
+echo "You can disconnect safely - build will continue"
+echo ""
+
+# Poll for completion
+echo "Monitoring build progress..."
+echo "(Checking every 60 seconds - this may take 12+ hours for riscv64)"
+echo ""
+
+POLL_COUNT=0
+while true; do
+  # Check if process is still running
+  if ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "kill -0 ${BUILD_PID} 2>/dev/null"; then
+    POLL_COUNT=$((POLL_COUNT + 1))
+
+    # Show progress every 5 minutes (5 polls)
+    if [ $((POLL_COUNT % 5)) -eq 0 ]; then
+      ELAPSED=$((POLL_COUNT * 60 / 60))
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Build still running (${ELAPSED} minutes elapsed)"
+
+      # Show last few lines of log
+      echo "Last 3 lines from build log:"
+      ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "tail -3 ${REMOTE_LOG} 2>/dev/null || echo '(no log yet)'"
+      echo ""
+    fi
+
+    sleep 60
+  else
+    # Process finished
+    echo "Build process completed!"
+    break
+  fi
+done
+
+# Retrieve the full log
+echo "Retrieving build log..."
+scp ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_LOG}" "${output_dir}/build.log" || echo "Warning: Could not retrieve log"
+
+# Check if build was successful
+if ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "[ -f ${REMOTE_STATUS} ] && grep -q SUCCESS ${REMOTE_STATUS}"; then
+  echo "Build completed successfully!"
+else
+  echo "ERROR: Build failed or did not complete successfully"
+  echo "Check log at: ${output_dir}/build.log"
   exit 1
 fi
 

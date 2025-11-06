@@ -17,8 +17,8 @@ REMOTE_HOST="${RISCV64_REMOTE_HOST:-192.168.1.185}"
 REMOTE_USER="${RISCV64_REMOTE_USER:-poddingue}"
 REMOTE_BUILD_DIR="${RISCV64_REMOTE_BUILD_DIR:-nodejs-builds}"
 
-# SSH options
-SSH_OPTS="-o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=30"
+# SSH options with keepalive to prevent timeouts on long builds
+SSH_OPTS="-o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=30 -o ServerAliveInterval=60 -o ServerAliveCountMax=30"
 
 echo "========================================"
 echo "Native riscv64 Build"

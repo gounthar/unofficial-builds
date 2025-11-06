@@ -71,7 +71,7 @@ BUILD_DIR="$8"
 LOG_FILE="$9"
 PID_FILE="${10}"
 
-cd "${BUILD_DIR}/staging"
+cd "$HOME/${BUILD_DIR}/staging"
 
 # Clean previous build
 rm -rf "node-${FULLVERSION}"
@@ -85,7 +85,7 @@ cd "node-${FULLVERSION}"
 # Set up ccache
 export CC="ccache gcc"
 export CXX="ccache g++"
-export CCACHE_DIR="${BUILD_DIR}/ccache"
+export CCACHE_DIR="$HOME/${BUILD_DIR}/ccache"
 export CCACHE_MAXSIZE="5G"
 
 # Show ccache stats before build
@@ -119,7 +119,7 @@ echo "Build completed successfully!"
 ls -lh node-*.tar.?z
 
 # Mark completion
-echo "SUCCESS" > "${BUILD_DIR}/logs/build-${FULLVERSION}.status"
+echo "SUCCESS" > "$HOME/${BUILD_DIR}/logs/build-${FULLVERSION}.status"
 REMOTE_SCRIPT
 
 # Copy build script to remote machine

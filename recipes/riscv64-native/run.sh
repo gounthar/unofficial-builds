@@ -35,7 +35,7 @@ if ! ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "echo 'Connected'" 2>&1; th
 fi
 
 # Ensure remote directories exist
-ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "mkdir -p ${REMOTE_BUILD_DIR}/{staging,ccache}"
+ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "mkdir -p \"${REMOTE_BUILD_DIR}\"/staging \"${REMOTE_BUILD_DIR}\"/ccache"
 
 # Copy source
 echo "Uploading source..."

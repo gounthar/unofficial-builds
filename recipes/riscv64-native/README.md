@@ -82,7 +82,7 @@ ssh poddingue@192.168.1.185 "mkdir -p ~/nodejs-builds/{staging,ccache,logs}"
 
 ```bash
 # Ensure SSH key authentication works
-ssh-add ~/.ssh/id_rsa  # Add your key
+ssh-add ~/.ssh/id_rsa  # Or use your dedicated key (e.g., ~/.ssh/id_riscv64_build)
 ssh poddingue@192.168.1.185 "echo 'SSH test passed'"
 ```
 
@@ -197,8 +197,8 @@ ssh -v poddingue@192.168.1.185
 # Check SSH agent
 ssh-add -l
 
-# Add key manually
-ssh-add ~/.ssh/id_rsa
+# Add key manually (use the key you created, e.g., id_riscv64_build or id_rsa)
+ssh-add ~/.ssh/id_riscv64_build  # Or ~/.ssh/id_rsa if using default key
 ```
 
 ### Build Fails

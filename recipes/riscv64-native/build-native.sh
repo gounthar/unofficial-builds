@@ -13,8 +13,10 @@ customtag="$3"
 datestring="$4"
 commit="$5"
 fullversion="$6"
-source_url="$7"
-source_urlbase="$8"
+# source_url and source_urlbase are passed for interface compatibility with standard recipes
+# but not used in native builds (source_file is transferred directly via rsync)
+source_url="$7"        # Kept for interface compatibility
+source_urlbase="$8"    # Kept for interface compatibility
 source_file="$9"
 output_dir="${10}"
 
@@ -160,7 +162,12 @@ ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" \
 sleep 2
 
 # Get the PID
-BUILD_PID=$(ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "cat ${REMOTE_PID_ABS} 2>/dev/null || echo 'unknown'")
+BUILD_PID=$(ssh ${SSH_OPTS} "${REMOTE_USER}@${REMOTE_HOST}" "cat ${REMOTE_PID_ABS}" 2>/dev/null)
+if [[ -z "${BUILD_PID}" ]] || ! [[ "${BUILD_PID}" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: Failed to retrieve valid PID from remote machine"
+  echo "Check that the build started correctly on ${REMOTE_HOST}"
+  exit 1
+fi
 echo "Build started with PID: ${BUILD_PID}"
 echo "Build running in background on ${REMOTE_HOST}"
 echo "You can disconnect safely - build will continue"

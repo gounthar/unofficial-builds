@@ -158,8 +158,8 @@ ssh -v poddingue@192.168.1.185
 # Check SSH agent
 ssh-add -l
 
-# Add key
-ssh-add ~/.ssh/id_rsa
+# Add key (use the key you generated in setup)
+ssh-add ~/.ssh/id_riscv64
 ```
 
 ### If build fails:

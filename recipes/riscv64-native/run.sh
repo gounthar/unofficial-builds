@@ -8,8 +8,10 @@ customtag="$3"
 datestring="$4"
 commit="$5"
 fullversion="$6"
-source_url="$7"
-source_urlbase="$8"
+# source_url and source_urlbase are passed for interface compatibility with standard recipes
+# but not used in native builds (source is in /home/node/node.tar.xz)
+source_url="$7"        # Kept for interface compatibility
+source_urlbase="$8"    # Kept for interface compatibility
 config_flags="--openssl-no-asm"
 
 # Remote machine configuration

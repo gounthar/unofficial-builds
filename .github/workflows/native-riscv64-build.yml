@@ -1,0 +1,290 @@
+name: Native RISC-V 64 Build
+
+on:
+  schedule:
+    # Run daily at 02:00 UTC to check for new Node.js releases
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Node.js version to build (e.g., v24.11.0)'
+        required: false
+        type: string
+      force_rebuild:
+        description: 'Force rebuild even if release exists'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  BUILD_DIR: nodejs-builds
+
+jobs:
+  check-releases:
+    name: Check for new Node.js releases
+    runs-on: [self-hosted, Linux, RISCV64]
+    outputs:
+      versions: ${{ steps.check.outputs.versions }}
+      has_new: ${{ steps.check.outputs.has_new }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for new releases
+        id: check
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            # Manual build requested
+            echo "versions=[\"${{ inputs.version }}\"]" >> $GITHUB_OUTPUT
+            echo "has_new=true" >> $GITHUB_OUTPUT
+          else
+            # Check for new releases from nodejs.org
+            LATEST_RELEASES=$(curl -sL https://nodejs.org/download/release/index.tab | \
+              awk 'NR>1 {print $1}' | \
+              grep -E '^v(2[0-9]|[3-9][0-9])\.' | \
+              head -5)
+
+            # Get existing releases from this repo
+            EXISTING_RELEASES=$(gh release list --limit 100 --json tagName -q '.[].tagName' || echo "")
+
+            # Find versions not yet built
+            NEW_VERSIONS=""
+            for version in $LATEST_RELEASES; do
+              if [ "${{ inputs.force_rebuild }}" = "true" ] || ! echo "$EXISTING_RELEASES" | grep -q "^${version}$"; then
+                NEW_VERSIONS="${NEW_VERSIONS} ${version}"
+              fi
+            done
+
+            if [ -z "$NEW_VERSIONS" ]; then
+              echo "has_new=false" >> $GITHUB_OUTPUT
+              echo "No new Node.js versions to build"
+            else
+              # Convert to JSON array
+              JSON_ARRAY=$(echo "$NEW_VERSIONS" | jq -R -s -c 'split(" ") | map(select(length > 0))')
+              echo "versions=${JSON_ARRAY}" >> $GITHUB_OUTPUT
+              echo "has_new=true" >> $GITHUB_OUTPUT
+              echo "New versions to build: ${NEW_VERSIONS}"
+            fi
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  build:
+    name: Build Node.js ${{ matrix.version }}
+    needs: check-releases
+    if: needs.check-releases.outputs.has_new == 'true'
+    runs-on: [self-hosted, Linux, RISCV64]
+    strategy:
+      matrix:
+        version: ${{ fromJson(needs.check-releases.outputs.versions) }}
+      fail-fast: false
+      max-parallel: 1  # Build one version at a time
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up build environment
+        run: |
+          # Ensure required tools are installed
+          command -v xz >/dev/null 2>&1 || sudo apt-get update && sudo apt-get install -y xz-utils
+          command -v ccache >/dev/null 2>&1 || sudo apt-get install -y ccache
+          command -v python3 >/dev/null 2>&1 || sudo apt-get install -y python3
+
+          # Create build directory structure
+          mkdir -p $HOME/${{ env.BUILD_DIR }}/{staging,ccache,logs}
+
+      - name: Download Node.js source
+        run: |
+          VERSION="${{ matrix.version }}"
+          VERSION_NO_V="${VERSION#v}"
+
+          # Download source if not already present
+          if [ ! -f "$HOME/${{ env.BUILD_DIR }}/staging/node-${VERSION}.tar.xz" ]; then
+            echo "Downloading Node.js ${VERSION} source..."
+            curl -LO "https://nodejs.org/dist/${VERSION}/node-${VERSION}.tar.xz"
+            mv "node-${VERSION}.tar.xz" "$HOME/${{ env.BUILD_DIR }}/staging/"
+          else
+            echo "Source already downloaded"
+          fi
+
+      - name: Build Node.js ${{ matrix.version }}
+        id: build
+        run: |
+          VERSION="${{ matrix.version }}"
+          VERSION_NO_V="${VERSION#v}"
+          BUILD_DIR="$HOME/${{ env.BUILD_DIR }}"
+
+          echo "Building Node.js ${VERSION} natively on riscv64..."
+          echo "Build directory: ${BUILD_DIR}"
+          echo "CPU count: $(nproc)"
+          echo "Memory: $(free -h | grep Mem | awk '{print $2}')"
+
+          # Extract source
+          cd "${BUILD_DIR}/staging"
+          rm -rf "node-${VERSION}"
+          tar -xf "node-${VERSION}.tar.xz"
+          cd "node-${VERSION}"
+
+          # Set up ccache
+          export CC="ccache gcc"
+          export CXX="ccache g++"
+          export CCACHE_DIR="${BUILD_DIR}/ccache"
+          export CCACHE_MAXSIZE="5G"
+
+          # Show ccache stats before build
+          echo "=== ccache stats before build ==="
+          ccache -s || true
+
+          # Build Node.js
+          echo "Starting Node.js build..."
+          time make -j$(nproc) binary V= \
+            DESTCPU="riscv64" \
+            ARCH="riscv64" \
+            VARIATION="" \
+            DISTTYPE="release" \
+            CONFIG_FLAGS="--openssl-no-asm" \
+            2>&1 | tee "${BUILD_DIR}/logs/build-${VERSION}.log"
+
+          # Show ccache stats after build
+          echo "=== ccache stats after build ==="
+          ccache -s || true
+
+          # Check if build succeeded
+          if ls node-*.tar.?z 1> /dev/null 2>&1; then
+            echo "Build completed successfully!"
+            ls -lh node-*.tar.?z
+
+            # Copy binaries to workflow workspace
+            mkdir -p "${GITHUB_WORKSPACE}/staging/release/${VERSION}"
+            cp node-*.tar.?z "${GITHUB_WORKSPACE}/staging/release/${VERSION}/"
+            cp "${BUILD_DIR}/logs/build-${VERSION}.log" "${GITHUB_WORKSPACE}/staging/release/${VERSION}/" || true
+
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "Build failed - no output tarballs found"
+            echo "success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Generate checksums
+        if: steps.build.outputs.success == 'true'
+        run: |
+          cd ${GITHUB_WORKSPACE}/staging/release/${{ matrix.version }}
+          sha256sum node-*.tar.gz > SHASUMS256.txt 2>/dev/null || true
+          sha256sum node-*.tar.xz >> SHASUMS256.txt 2>/dev/null || true
+          cat SHASUMS256.txt
+
+      - name: Create GitHub Release
+        if: steps.build.outputs.success == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ matrix.version }}"
+
+          # Check if release already exists
+          if gh release view "${VERSION}" >/dev/null 2>&1; then
+            if [ "${{ inputs.force_rebuild }}" = "true" ]; then
+              echo "Deleting existing release ${VERSION} (force rebuild requested)"
+              gh release delete "${VERSION}" --yes || true
+              git push origin :refs/tags/${VERSION} || true
+            else
+              echo "Release ${VERSION} already exists, skipping"
+              exit 0
+            fi
+          fi
+
+          # Create release notes
+          cat > release_notes.md <<EOF
+          # Node.js ${VERSION} - Native RISC-V 64 Build
+
+          This release provides natively compiled Node.js binaries for RISC-V 64-bit architecture.
+
+          ## Build Information
+
+          - **Architecture**: linux-riscv64
+          - **Build Type**: Native compilation on actual riscv64 hardware (Banana Pi F3)
+          - **Compiler**: gcc 14.2.0
+          - **Platform**: Debian 13 (trixie)
+          - **Configuration**: \`--openssl-no-asm\`
+
+          ## Installation
+
+          \`\`\`bash
+          # Download and extract
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${VERSION}/node-${VERSION#v}-linux-riscv64.tar.xz
+          tar -xJf node-${VERSION#v}-linux-riscv64.tar.xz
+
+          # Verify
+          ./node-${VERSION#v}-linux-riscv64/bin/node --version
+          \`\`\`
+
+          ## Checksums
+
+          See \`SHASUMS256.txt\` for SHA256 checksums of all artifacts.
+
+          ## Notes
+
+          These binaries are built as part of the [unofficial-builds](https://unofficial-builds.nodejs.org/) project and are **experimental**. They may not have the same level of testing as official Node.js releases.
+
+          Built using the native riscv64 build recipe with SSH orchestration to actual RISC-V hardware.
+
+          ---
+
+          *Built automatically via GitHub Actions on $(date -u +"%Y-%m-%d %H:%M:%S UTC")*
+          EOF
+
+          # Create release
+          gh release create "${VERSION}" \
+            --title "Node.js ${VERSION} for RISC-V 64" \
+            --notes-file release_notes.md \
+            ${GITHUB_WORKSPACE}/staging/release/${VERSION}/node-*.tar.gz \
+            ${GITHUB_WORKSPACE}/staging/release/${VERSION}/node-*.tar.xz \
+            ${GITHUB_WORKSPACE}/staging/release/${VERSION}/SHASUMS256.txt
+
+          echo "Release ${VERSION} created successfully!"
+
+      - name: Notify build status
+        if: always()
+        run: |
+          if [ "${{ steps.build.outputs.success }}" = "true" ]; then
+            echo "✅ Build succeeded for ${{ matrix.version }}"
+          else
+            echo "❌ Build failed for ${{ matrix.version }}"
+          fi
+
+      - name: Upload build logs as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ matrix.version }}
+          path: ${GITHUB_WORKSPACE}/staging/release/${{ matrix.version }}/build.log
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Clean up build artifacts
+        if: always()
+        run: |
+          # Keep ccache but clean up build directory to save disk space
+          rm -rf "$HOME/${{ env.BUILD_DIR }}/staging/node-${{ matrix.version }}"
+
+  summary:
+    name: Build Summary
+    needs: [check-releases, build]
+    if: always()
+    runs-on: [self-hosted, Linux, RISCV64]
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# Native RISC-V 64 Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Workflow Run**: ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.check-releases.outputs.has_new }}" = "true" ]; then
+            echo "**Versions Built**: ${{ needs.check-releases.outputs.versions }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Check the [Releases page](https://github.com/${{ github.repository }}/releases) for binaries." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Result**: No new Node.js versions to build" >> $GITHUB_STEP_SUMMARY
+          fi

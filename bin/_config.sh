@@ -7,10 +7,16 @@ recipes=(
   "x64-glibc-217"
   "x64-pointer-compression"
   "x64-usdt"
-  "riscv64"
+  "riscv64-native"  # Native build on riscv64 hardware (replaces riscv64 cross-compile)
   "loong64"
   "x64-debug"
 )
+
+# Native build configuration for riscv64
+# These can be overridden by environment variables
+export RISCV64_REMOTE_HOST="${RISCV64_REMOTE_HOST:-192.168.1.185}"
+export RISCV64_REMOTE_USER="${RISCV64_REMOTE_USER:-poddingue}"
+export RISCV64_REMOTE_BUILD_DIR="${RISCV64_REMOTE_BUILD_DIR:-nodejs-builds}"
 
 
 # This should be updated as new versions of nodejs-dist-indexer are released to

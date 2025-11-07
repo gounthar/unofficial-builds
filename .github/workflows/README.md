@@ -64,10 +64,12 @@ Since the workflow runs directly on the build machine, **no SSH secrets are need
 ##### Automatic Builds (Scheduled)
 
 The workflow runs automatically every day at 02:00 UTC. It will:
-1. Check for new Node.js releases from nodejs.org
+1. Check for new Node.js **LTS** releases from nodejs.org (by default)
 2. Compare with existing releases in this repository
 3. Build any new versions natively on riscv64 hardware
 4. Create GitHub releases with the built binaries
+
+**Note:** Scheduled builds default to `lts_only: true`, focusing on production-ready Long Term Support versions. To build all versions, use manual workflow dispatch with `lts_only: false`.
 
 ##### Manual Builds
 
@@ -78,10 +80,12 @@ To trigger a manual build:
 3. Optionally specify:
    - **version**: Specific Node.js version (e.g., `v24.11.0`)
    - **force_rebuild**: Check to rebuild even if release exists
+   - **lts_only**: Only build LTS versions (default: `true`)
 
 **Examples:**
-- Build latest releases: Leave version empty, run workflow
+- Build latest LTS releases: Leave version empty, run workflow (default)
 - Build specific version: Enter `v24.11.0` in version field
+- Build all versions (including non-LTS): Uncheck "lts_only"
 - Rebuild existing: Enter version and check "force_rebuild"
 
 #### Workflow Steps
@@ -176,7 +180,18 @@ head -10  # Check latest 10 versions
 
 ##### Filter Versions
 
-Add version filtering logic in the check-releases step to only build specific major versions, LTS releases, etc.
+**LTS Filtering (Built-in):**
+
+The workflow includes built-in LTS filtering via the `lts_only` parameter:
+- **Default**: Only builds LTS versions (recommended for production)
+- **Disable**: Set `lts_only: false` in workflow_dispatch to build all versions
+- **Detection**: Checks column 10 in nodejs.org index.tab for LTS codename
+
+LTS versions have codenames (e.g., "Krypton", "Hydrogen"), while non-LTS versions have "-".
+
+**Custom Filtering:**
+
+For additional filtering, modify the check-releases step to filter by specific major versions or custom criteria.
 
 #### Security Notes
 

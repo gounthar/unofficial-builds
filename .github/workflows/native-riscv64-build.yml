@@ -15,6 +15,11 @@ on:
         required: false
         type: boolean
         default: false
+      lts_only:
+        description: 'Only build LTS versions'
+        required: false
+        type: boolean
+        default: true
 
 env:
   BUILD_DIR: nodejs-builds
@@ -39,13 +44,23 @@ jobs:
             echo "has_new=true" >> $GITHUB_OUTPUT
           else
             # Check for new releases from nodejs.org
-            LATEST_RELEASES=$(curl -sL https://nodejs.org/download/release/index.tab | \
-              awk 'NR>1 {print $1}' | \
-              grep -E '^v(2[0-9]|[3-9][0-9])\.' | \
-              head -5)
+            # Column 1: version, Column 10: lts (codename or "-")
+            if [ "${{ inputs.lts_only }}" = "true" ]; then
+              echo "Checking for LTS versions only..."
+              LATEST_RELEASES=$(curl -sL https://nodejs.org/download/release/index.tab | \
+                awk 'NR>1 && $10 != "-" {print $1}' | \
+                grep -E '^v(2[0-9]|[3-9][0-9])\.' | \
+                head -5)
+            else
+              echo "Checking for all versions..."
+              LATEST_RELEASES=$(curl -sL https://nodejs.org/download/release/index.tab | \
+                awk 'NR>1 {print $1}' | \
+                grep -E '^v(2[0-9]|[3-9][0-9])\.' | \
+                head -5)
+            fi
 
             # Get existing releases from this repo
-            EXISTING_RELEASES=$(gh release list --limit 100 --json tagName -q '.[].tagName' || echo "")
+            EXISTING_RELEASES=$(gh release list --repo ${{ github.repository }} --limit 100 --json tagName -q '.[].tagName' || echo "")
 
             # Find versions not yet built
             NEW_VERSIONS=""
@@ -182,10 +197,10 @@ jobs:
           VERSION="${{ matrix.version }}"
 
           # Check if release already exists
-          if gh release view "${VERSION}" >/dev/null 2>&1; then
+          if gh release view "${VERSION}" --repo ${{ github.repository }} >/dev/null 2>&1; then
             if [ "${{ inputs.force_rebuild }}" = "true" ]; then
               echo "Deleting existing release ${VERSION} (force rebuild requested)"
-              gh release delete "${VERSION}" --yes || true
+              gh release delete "${VERSION}" --repo ${{ github.repository }} --yes || true
               git push origin :refs/tags/${VERSION} || true
             else
               echo "Release ${VERSION} already exists, skipping"
@@ -235,6 +250,7 @@ jobs:
 
           # Create release
           gh release create "${VERSION}" \
+            --repo ${{ github.repository }} \
             --title "Node.js ${VERSION} for RISC-V 64" \
             --notes-file release_notes.md \
             ${GITHUB_WORKSPACE}/staging/release/${VERSION}/node-*.tar.gz \

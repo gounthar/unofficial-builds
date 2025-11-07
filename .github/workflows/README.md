@@ -11,42 +11,53 @@ Automatically builds Node.js binaries natively on RISC-V 64-bit hardware using a
 - **Scheduled Builds**: Runs daily at 02:00 UTC to check for new Node.js releases
 - **Manual Builds**: Can be triggered manually via workflow_dispatch with version selection
 - **Automatic Releases**: Creates GitHub releases with built binaries as downloadable assets
-- **Native Compilation**: Builds on actual riscv64 hardware (not cross-compiled)
+- **Native Compilation**: Builds directly on riscv64 hardware (not cross-compiled)
+- **ccache Optimization**: Reuses compiled objects for faster subsequent builds
+
+#### Architecture
+
+Unlike the SSH orchestration used in manual builds, this workflow runs **directly on the riscv64 GitHub runner**:
+
+1. Runner detects new Node.js releases
+2. Downloads source tarball
+3. Builds locally using native gcc
+4. Creates GitHub releases with binaries
+
+**No SSH needed** - the runner IS the build machine!
 
 #### Requirements
 
 ##### Self-Hosted Runner
 
-This workflow requires a self-hosted GitHub Actions runner with:
+This workflow requires a self-hosted GitHub Actions runner running **on your riscv64 machine**:
+
 - **Architecture**: RISC-V 64-bit (riscv64)
 - **OS**: Linux (tested on Debian 13)
 - **Labels**: `self-hosted`, `Linux`, `RISCV64`
-- **SSH Access**: Runner must have SSH access to the remote build machine
+- **Network**: Can be on a private network (no inbound access needed)
 
-To set up the runner, follow the [GitHub Actions self-hosted runner documentation](https://docs.github.com/en/actions/hosting-your-own-runners).
+##### Required Tools
 
-##### Repository Secrets
-
-Configure these secrets in your repository settings (Settings → Secrets and variables → Actions):
-
-| Secret Name | Description | Example |
-|-------------|-------------|---------|
-| `RISCV64_REMOTE_HOST` | IP address or hostname of the remote riscv64 build machine | `192.168.1.185` |
-| `RISCV64_REMOTE_USER` | SSH username for the remote machine | `poddingue` |
-| `RISCV64_REMOTE_BUILD_DIR` | Build directory on remote machine (optional, defaults to `nodejs-builds`) | `nodejs-builds` |
-
-##### SSH Key Setup
-
-The self-hosted runner must have SSH key authentication set up to access the remote build machine:
+The runner must have these tools installed:
 
 ```bash
-# On the runner machine
-ssh-keygen -t ed25519 -f ~/.ssh/id_riscv64_build
-ssh-copy-id -i ~/.ssh/id_riscv64_build ${RISCV64_REMOTE_USER}@${RISCV64_REMOTE_HOST}
-
-# Test connection
-ssh -i ~/.ssh/id_riscv64_build ${RISCV64_REMOTE_USER}@${RISCV64_REMOTE_HOST} "echo 'Connected'"
+sudo apt-get update
+sudo apt-get install -y gcc g++ make python3 git ccache xz-utils curl
 ```
+
+##### Runner Setup
+
+Follow the [GitHub Actions self-hosted runner documentation](https://docs.github.com/en/actions/hosting-your-own-runners) to install the runner on your riscv64 machine.
+
+**Key steps:**
+1. Go to your repo → Settings → Actions → Runners → New self-hosted runner
+2. Select Linux and follow the download/configure instructions
+3. Add the labels: `self-hosted`, `Linux`, `RISCV64`
+4. Start the runner service
+
+##### No Secrets Required!
+
+Since the workflow runs directly on the build machine, **no SSH secrets are needed**. The runner has local access to everything.
 
 #### Usage
 
@@ -102,18 +113,16 @@ Each successful build produces:
 
 #### Troubleshooting
 
-##### SSH Connection Fails
+##### Runner Not Available
 
-```bash
-# On runner machine, test SSH manually
-ssh ${RISCV64_REMOTE_USER}@${RISCV64_REMOTE_HOST} "echo 'Test'"
-
-# Check SSH agent
-ssh-add -l
-
-# Add key if needed
-ssh-add ~/.ssh/id_riscv64_build
-```
+If the workflow can't find a runner:
+1. Check runner status: Settings → Actions → Runners
+2. Ensure runner is online and has correct labels
+3. Restart runner service if needed:
+   ```bash
+   cd ~/actions-runner
+   ./run.sh
+   ```
 
 ##### Build Fails
 
@@ -121,11 +130,23 @@ ssh-add ~/.ssh/id_riscv64_build
 2. Download build log artifacts for detailed error messages
 3. Test build manually on the runner:
    ```bash
-   export RISCV64_REMOTE_HOST="192.168.1.185"
-   export RISCV64_REMOTE_USER="poddingue"
-   export RISCV64_REMOTE_BUILD_DIR="nodejs-builds"
-   bash bin/test_native_build.sh -v v24.11.0
+   cd ~/nodejs-builds/staging
+   curl -LO https://nodejs.org/dist/v24.11.0/node-v24.11.0.tar.xz
+   tar -xf node-v24.11.0.tar.xz
+   cd node-v24.11.0
+   export CC="ccache gcc"
+   export CXX="ccache g++"
+   make -j$(nproc) binary CONFIG_FLAGS="--openssl-no-asm"
    ```
+
+##### Disk Space Issues
+
+The workflow automatically cleans up extracted source after each build, but you may need to manually clean ccache:
+```bash
+export CCACHE_DIR="$HOME/nodejs-builds/ccache"
+ccache -C  # Clear all cache
+ccache -c  # Clean old entries
+```
 
 ##### No New Versions Found
 
@@ -159,11 +180,11 @@ Add version filtering logic in the check-releases step to only build specific ma
 
 #### Security Notes
 
-- SSH keys on the runner should be dedicated to builds (not your personal keys)
-- Limit SSH key permissions on the remote machine if possible
-- Keep the remote build machine on a trusted network
-- Regularly update dependencies on both runner and remote machine
-- Repository secrets are encrypted and only exposed to workflow runs
+- Runner operates on a private network (no inbound access needed)
+- Only outbound HTTPS to GitHub and nodejs.org
+- No secrets required (builds locally)
+- Regularly update dependencies on the runner machine
+- Consider running runner as a dedicated user (not root)
 
 #### Related Documentation
 

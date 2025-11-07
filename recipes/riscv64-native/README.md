@@ -169,6 +169,12 @@ export RISCV64_REMOTE_BUILD_DIR="nodejs-builds"
 - **Cross-compile** (x86_64 → riscv64): ~30-45 minutes
 - **Native** (riscv64 hardware): ~40-60 minutes
 
+> **Note on Performance:** Native builds on riscv64 hardware (Banana Pi F3) are currently slower than cross-compilation due to the limited processing power of available riscv64 hardware compared to modern x86_64 build servers. However, native builds are chosen for several important reasons:
+> - **Real Hardware Validation**: Ensures binaries work correctly on actual riscv64 systems
+> - **Better Compatibility**: Avoids cross-compilation quirks and toolchain issues
+> - **Catch Hardware-Specific Issues**: Identifies problems that may not appear in cross-compiled builds
+> - **Future-Proof**: As riscv64 hardware improves, build times will naturally decrease
+
 ### ccache Benefits
 
 After first build, subsequent builds with ccache:

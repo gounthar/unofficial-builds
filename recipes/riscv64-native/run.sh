@@ -52,7 +52,7 @@ cd node-${fullversion}
 
 export CC="ccache gcc"
 export CXX="ccache g++"
-export CCACHE_DIR="${REMOTE_BUILD_DIR}/ccache"
+export CCACHE_DIR="\$HOME/${REMOTE_BUILD_DIR}/ccache"
 export CCACHE_MAXSIZE="5G"
 
 echo "=== Build Info ==="

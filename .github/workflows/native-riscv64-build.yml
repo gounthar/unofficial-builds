@@ -45,11 +45,11 @@ jobs:
           else
             # Check for new releases from nodejs.org
             # Column 1: version, Column 10: lts (codename or "-")
-            # For scheduled runs, default to LTS only. For manual runs, use input parameter.
-            LTS_ONLY="${{ inputs.lts_only }}"
-            if [ -z "$LTS_ONLY" ]; then
-              # Default to true for scheduled runs (where inputs.lts_only is empty)
+            # For scheduled runs, always use LTS only. For manual runs, use input parameter.
+            if [ "${{ github.event_name }}" = "schedule" ]; then
               LTS_ONLY="true"
+            else
+              LTS_ONLY="${{ inputs.lts_only }}"
             fi
 
             if [ "$LTS_ONLY" = "true" ]; then

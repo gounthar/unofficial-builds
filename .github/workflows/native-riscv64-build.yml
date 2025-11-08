@@ -2,7 +2,7 @@ name: Native RISC-V 64 Build
 
 on:
   schedule:
-    # Run daily at 02:00 UTC to check for new Node.js releases
+    # Run daily at 02:00 UTC to check for new Node.js LTS releases
     - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
@@ -45,7 +45,14 @@ jobs:
           else
             # Check for new releases from nodejs.org
             # Column 1: version, Column 10: lts (codename or "-")
-            if [ "${{ inputs.lts_only }}" = "true" ]; then
+            # For scheduled runs, default to LTS only. For manual runs, use input parameter.
+            LTS_ONLY="${{ inputs.lts_only }}"
+            if [ -z "$LTS_ONLY" ]; then
+              # Default to true for scheduled runs (where inputs.lts_only is empty)
+              LTS_ONLY="true"
+            fi
+
+            if [ "$LTS_ONLY" = "true" ]; then
               echo "Checking for LTS versions only..."
               LATEST_RELEASES=$(curl -sL https://nodejs.org/download/release/index.tab | \
                 awk 'NR>1 && $10 != "-" {print $1}' | \
@@ -89,6 +96,7 @@ jobs:
     needs: check-releases
     if: needs.check-releases.outputs.has_new == 'true'
     runs-on: [self-hosted, Linux, RISCV64]
+    timeout-minutes: 1200  # 20 hours - riscv64 builds can take 15+ hours
     strategy:
       matrix:
         version: ${{ fromJson(needs.check-releases.outputs.versions) }}

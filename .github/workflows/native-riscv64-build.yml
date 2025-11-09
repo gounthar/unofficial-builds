@@ -193,8 +193,8 @@ jobs:
         if: steps.build.outputs.success == 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ruby ruby-dev build-essential
-          sudo gem install fpm
+          sudo apt-get install -y ruby ruby-dev
+          sudo gem install fpm -v 1.15.1
 
       - name: Build Debian package
         if: steps.build.outputs.success == 'true'
@@ -208,7 +208,7 @@ jobs:
 
           # Extract tarball to prepare for packaging
           tar -xJf "${RELEASE_DIR}/node-${VERSION}-linux-riscv64.tar.xz" \
-            -C package-staging --strip-components=1
+            -C package-staging --strip-components=1 || { echo "Debian package: tar extraction failed"; exit 1; }
 
           # Create .deb package
           fpm -s dir -t deb \
@@ -221,8 +221,8 @@ jobs:
             --license "MIT" \
             --maintainer "Bruno Verachten <https://github.com/gounthar>" \
             --depends "libc6 >= 2.34" \
-            --depends "libssl3" \
-            --depends "zlib1g" \
+            --depends "libssl3 >= 3.0.0" \
+            --depends "zlib1g >= 1:1.2.11" \
             --prefix /usr \
             -C package-staging/ \
             .
@@ -248,7 +248,7 @@ jobs:
 
           # Extract tarball to prepare for packaging
           tar -xJf "${RELEASE_DIR}/node-${VERSION}-linux-riscv64.tar.xz" \
-            -C package-staging --strip-components=1
+            -C package-staging --strip-components=1 || { echo "RPM package: tar extraction failed"; exit 1; }
 
           # Create .rpm package
           fpm -s dir -t rpm \
@@ -261,7 +261,7 @@ jobs:
             --license "MIT" \
             --maintainer "Bruno Verachten <https://github.com/gounthar>" \
             --depends "glibc >= 2.34" \
-            --depends "openssl >= 3.0.0" \
+            --depends "openssl-libs >= 3.0.0" \
             --depends "zlib" \
             --prefix /usr \
             -C package-staging/ \

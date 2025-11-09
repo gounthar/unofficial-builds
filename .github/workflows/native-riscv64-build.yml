@@ -189,12 +189,101 @@ jobs:
             exit 1
           fi
 
+      - name: Install packaging tools
+        if: steps.build.outputs.success == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby ruby-dev build-essential
+          sudo gem install fpm
+
+      - name: Build Debian package
+        if: steps.build.outputs.success == 'true'
+        run: |
+          VERSION="${{ matrix.version }}"
+          VERSION_NO_V="${VERSION#v}"
+          RELEASE_DIR="${GITHUB_WORKSPACE}/staging/release/${VERSION}"
+
+          # Create staging directory for package
+          mkdir -p package-staging
+
+          # Extract tarball to prepare for packaging
+          tar -xJf "${RELEASE_DIR}/node-${VERSION}-linux-riscv64.tar.xz" \
+            -C package-staging --strip-components=1
+
+          # Create .deb package
+          fpm -s dir -t deb \
+            -n nodejs \
+            -v "${VERSION_NO_V}" \
+            --iteration 1 \
+            --architecture riscv64 \
+            --description "Node.js JavaScript runtime - RISC-V 64-bit native build" \
+            --url "https://github.com/${{ github.repository }}" \
+            --license "MIT" \
+            --maintainer "Bruno Verachten <https://github.com/gounthar>" \
+            --depends "libc6 >= 2.34" \
+            --depends "libssl3" \
+            --depends "zlib1g" \
+            --prefix /usr \
+            -C package-staging/ \
+            .
+
+          # Move package to release directory
+          mv nodejs_${VERSION_NO_V}-1_riscv64.deb "${RELEASE_DIR}/"
+
+          echo "Created: nodejs_${VERSION_NO_V}-1_riscv64.deb"
+          ls -lh "${RELEASE_DIR}/nodejs_${VERSION_NO_V}-1_riscv64.deb"
+
+          # Clean up staging
+          rm -rf package-staging
+
+      - name: Build RPM package
+        if: steps.build.outputs.success == 'true'
+        run: |
+          VERSION="${{ matrix.version }}"
+          VERSION_NO_V="${VERSION#v}"
+          RELEASE_DIR="${GITHUB_WORKSPACE}/staging/release/${VERSION}"
+
+          # Create staging directory for package
+          mkdir -p package-staging
+
+          # Extract tarball to prepare for packaging
+          tar -xJf "${RELEASE_DIR}/node-${VERSION}-linux-riscv64.tar.xz" \
+            -C package-staging --strip-components=1
+
+          # Create .rpm package
+          fpm -s dir -t rpm \
+            -n nodejs \
+            -v "${VERSION_NO_V}" \
+            --iteration 1 \
+            --architecture riscv64 \
+            --description "Node.js JavaScript runtime - RISC-V 64-bit native build" \
+            --url "https://github.com/${{ github.repository }}" \
+            --license "MIT" \
+            --maintainer "Bruno Verachten <https://github.com/gounthar>" \
+            --depends "glibc >= 2.34" \
+            --depends "openssl >= 3.0.0" \
+            --depends "zlib" \
+            --prefix /usr \
+            -C package-staging/ \
+            .
+
+          # Move package to release directory
+          mv nodejs-${VERSION_NO_V}-1.riscv64.rpm "${RELEASE_DIR}/"
+
+          echo "Created: nodejs-${VERSION_NO_V}-1.riscv64.rpm"
+          ls -lh "${RELEASE_DIR}/nodejs-${VERSION_NO_V}-1.riscv64.rpm"
+
+          # Clean up staging
+          rm -rf package-staging
+
       - name: Generate checksums
         if: steps.build.outputs.success == 'true'
         run: |
           cd ${GITHUB_WORKSPACE}/staging/release/${{ matrix.version }}
           sha256sum node-*.tar.gz > SHASUMS256.txt 2>/dev/null || true
           sha256sum node-*.tar.xz >> SHASUMS256.txt 2>/dev/null || true
+          sha256sum nodejs_*.deb >> SHASUMS256.txt 2>/dev/null || true
+          sha256sum nodejs-*.rpm >> SHASUMS256.txt 2>/dev/null || true
           cat SHASUMS256.txt
 
       - name: Create GitHub Release
@@ -232,14 +321,65 @@ jobs:
 
           ## Installation
 
+          ### Option 1: Debian Package (Recommended)
+
+          \`\`\`bash
+          # Download and install .deb package
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${VERSION}/nodejs_${VERSION#v}-1_riscv64.deb
+          sudo dpkg -i nodejs_${VERSION#v}-1_riscv64.deb
+
+          # Verify installation
+          node --version
+          npm --version
+          \`\`\`
+
+          ### Option 2: RPM Package
+
+          \`\`\`bash
+          # Download and install .rpm package
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${VERSION}/nodejs-${VERSION#v}-1.riscv64.rpm
+          sudo rpm -i nodejs-${VERSION#v}-1.riscv64.rpm
+
+          # Verify installation
+          node --version
+          npm --version
+          \`\`\`
+
+          ### Option 3: Tarball (Manual Installation)
+
           \`\`\`bash
           # Download and extract
           curl -LO https://github.com/${{ github.repository }}/releases/download/${VERSION}/node-${VERSION#v}-linux-riscv64.tar.xz
           tar -xJf node-${VERSION#v}-linux-riscv64.tar.xz
 
+          # Add to PATH or install to /usr/local
+          sudo cp -r node-${VERSION#v}-linux-riscv64/* /usr/local/
+
           # Verify
-          ./node-${VERSION#v}-linux-riscv64/bin/node --version
+          node --version
           \`\`\`
+
+          ## Available Artifacts
+
+          - \`nodejs_${VERSION#v}-1_riscv64.deb\` - Debian package
+          - \`nodejs-${VERSION#v}-1.riscv64.rpm\` - RPM package
+          - \`node-${VERSION#v}-linux-riscv64.tar.gz\` - Gzipped tarball
+          - \`node-${VERSION#v}-linux-riscv64.tar.xz\` - XZ compressed tarball
+          - \`SHASUMS256.txt\` - SHA256 checksums for all artifacts
+
+          ## Package Details
+
+          **Dependencies:**
+          - Debian: libc6 >= 2.34, libssl3, zlib1g
+          - RPM: glibc >= 2.34, openssl >= 3.0.0, zlib
+
+          **Installation Prefix:** \`/usr\`
+
+          **Included Binaries:**
+          - \`/usr/bin/node\`
+          - \`/usr/bin/npm\`
+          - \`/usr/bin/npx\`
+          - \`/usr/bin/corepack\`
 
           ## Checksums
 
@@ -263,6 +403,8 @@ jobs:
             --notes-file release_notes.md \
             ${GITHUB_WORKSPACE}/staging/release/${VERSION}/node-*.tar.gz \
             ${GITHUB_WORKSPACE}/staging/release/${VERSION}/node-*.tar.xz \
+            ${GITHUB_WORKSPACE}/staging/release/${VERSION}/nodejs_*.deb \
+            ${GITHUB_WORKSPACE}/staging/release/${VERSION}/nodejs-*.rpm \
             ${GITHUB_WORKSPACE}/staging/release/${VERSION}/SHASUMS256.txt
 
           echo "Release ${VERSION} created successfully!"

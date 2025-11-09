@@ -293,16 +293,13 @@ jobs:
         run: |
           VERSION="${{ matrix.version }}"
 
-          # Check if release already exists
+          # Check if release already exists and we're not forcing rebuild
           if gh release view "${VERSION}" --repo ${{ github.repository }} >/dev/null 2>&1; then
-            if [ "${{ inputs.force_rebuild }}" = "true" ]; then
-              echo "Deleting existing release ${VERSION} (force rebuild requested)"
-              gh release delete "${VERSION}" --repo ${{ github.repository }} --yes || true
-              git push origin :refs/tags/${VERSION} || true
-            else
-              echo "Release ${VERSION} already exists, skipping"
+            if [ "${{ inputs.force_rebuild }}" != "true" ]; then
+              echo "Release ${VERSION} already exists, skipping (use force_rebuild=true to overwrite)"
               exit 0
             fi
+            echo "Release ${VERSION} exists but force_rebuild=true - will replace after building packages"
           fi
 
           # Create release notes
@@ -395,6 +392,16 @@ jobs:
 
           *Built automatically via GitHub Actions on $(date -u +"%Y-%m-%d %H:%M:%S UTC")*
           EOF
+
+          # Delete existing release NOW (after successful build and packaging)
+          # This ensures we only delete if we have replacement artifacts ready
+          if gh release view "${VERSION}" --repo ${{ github.repository }} >/dev/null 2>&1; then
+            if [ "${{ inputs.force_rebuild }}" = "true" ]; then
+              echo "Deleting existing release ${VERSION} (all artifacts ready for replacement)"
+              gh release delete "${VERSION}" --repo ${{ github.repository }} --yes || true
+              git push origin :refs/tags/${VERSION} || true
+            fi
+          fi
 
           # Create release
           gh release create "${VERSION}" \

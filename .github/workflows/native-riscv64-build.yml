@@ -81,8 +81,8 @@ jobs:
               echo "has_new=false" >> $GITHUB_OUTPUT
               echo "No new Node.js versions to build"
             else
-              # Convert to JSON array
-              JSON_ARRAY=$(echo "$NEW_VERSIONS" | jq -R -s -c 'split(" ") | map(select(length > 0))')
+              # Convert to JSON array (trim whitespace to avoid newline issues)
+              JSON_ARRAY=$(echo "$NEW_VERSIONS" | tr -s ' ' '\n' | grep -v '^$' | jq -R -s -c 'split("\n") | map(select(length > 0))')
               echo "versions=${JSON_ARRAY}" >> $GITHUB_OUTPUT
               echo "has_new=true" >> $GITHUB_OUTPUT
               echo "New versions to build: ${NEW_VERSIONS}"
@@ -106,7 +106,30 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check if release already exists
+        id: check_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ matrix.version }}"
+
+          # Check if release already exists
+          if gh release view "${VERSION}" --repo ${{ github.repository }} >/dev/null 2>&1; then
+            if [ "${{ inputs.force_rebuild }}" != "true" ]; then
+              echo "Release ${VERSION} already exists and force_rebuild is not set. Skipping build."
+              echo "skip=true" >> $GITHUB_OUTPUT
+              exit 0
+            else
+              echo "Release ${VERSION} exists but force_rebuild=true. Will rebuild."
+              echo "skip=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "Release ${VERSION} does not exist. Proceeding with build."
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Set up build environment
+        if: steps.check_release.outputs.skip != 'true'
         run: |
           # Ensure required tools are installed
           command -v xz >/dev/null 2>&1 || sudo apt-get update && sudo apt-get install -y xz-utils
@@ -117,6 +140,7 @@ jobs:
           mkdir -p $HOME/${{ env.BUILD_DIR }}/{staging,ccache,logs}
 
       - name: Download Node.js source
+        if: steps.check_release.outputs.skip != 'true'
         run: |
           VERSION="${{ matrix.version }}"
           VERSION_NO_V="${VERSION#v}"
@@ -132,6 +156,7 @@ jobs:
 
       - name: Build Node.js ${{ matrix.version }}
         id: build
+        if: steps.check_release.outputs.skip != 'true'
         run: |
           VERSION="${{ matrix.version }}"
           VERSION_NO_V="${VERSION#v}"

@@ -277,7 +277,9 @@ jobs:
             -C package-staging --strip-components=1 || { echo "RPM package: tar extraction failed"; exit 1; }
 
           # Create .rpm package
+          echo "Creating RPM package with fpm..."
           fpm -s dir -t rpm \
+            --verbose \
             -n nodejs \
             -v "${VERSION_NO_V}" \
             --iteration 1 \
@@ -291,7 +293,11 @@ jobs:
             --depends "zlib" \
             --prefix /usr \
             -C package-staging/ \
-            .
+            . || {
+            echo "FPM failed! Looking for generated spec file..."
+            find /tmp -name "nodejs.spec" -type f -exec cat {} \; 2>/dev/null || true
+            exit 1
+          }
 
           # Move package to release directory
           mv nodejs-${VERSION_NO_V}-1.riscv64.rpm "${RELEASE_DIR}/"

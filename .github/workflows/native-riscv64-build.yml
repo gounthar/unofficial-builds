@@ -219,7 +219,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ruby ruby-dev rpm
-          sudo rpm --initdb || { echo "Failed to initialize RPM database"; exit 1; }
           sudo gem install fpm -v 1.15.1
 
       - name: Build Debian package
@@ -265,42 +264,85 @@ jobs:
       - name: Build RPM package
         if: steps.build.outputs.success == 'true'
         run: |
+          set -euo pipefail
+
           VERSION="${{ matrix.version }}"
           VERSION_NO_V="${VERSION#v}"
           RELEASE_DIR="${GITHUB_WORKSPACE}/staging/release/${VERSION}"
 
-          # Create staging directory for package
-          mkdir -p package-staging
+          echo "Building RPM package for Node.js ${VERSION}..."
 
-          # Extract tarball to prepare for packaging
-          tar -xJf "${RELEASE_DIR}/node-${VERSION}-linux-riscv64.tar.xz" \
-            -C package-staging --strip-components=1 || { echo "RPM package: tar extraction failed"; exit 1; }
+          # Set up RPM build tree
+          mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 
-          # Create .rpm package
-          fpm -s dir -t rpm \
-            -n nodejs \
-            -v "${VERSION_NO_V}" \
-            --iteration 1 \
-            --architecture riscv64 \
-            --description "Node.js JavaScript runtime - RISC-V 64-bit native build" \
-            --url "https://github.com/${{ github.repository }}" \
-            --license "MIT" \
-            --maintainer "Bruno Verachten <https://github.com/gounthar>" \
-            --depends "glibc >= 2.34" \
-            --depends "openssl-libs >= 3.0.0" \
-            --depends "zlib" \
-            --prefix /usr \
-            -C package-staging/ \
-            .
+          # Clean previous builds
+          rm -f ~/rpmbuild/RPMS/riscv64/nodejs-*.rpm
+          rm -f ~/rpmbuild/SOURCES/node-${VERSION}-linux-riscv64.tar.xz
+          rm -f ~/rpmbuild/SPECS/nodejs.spec
+
+          # Copy tarball to SOURCES
+          cp "${RELEASE_DIR}/node-${VERSION}-linux-riscv64.tar.xz" ~/rpmbuild/SOURCES/
+
+          # Copy spec file and update version
+          cp ${GITHUB_WORKSPACE}/recipes/riscv64-native/nodejs.spec ~/rpmbuild/SPECS/
+          sed -i "s/^Version:.*/Version:        ${VERSION_NO_V}/" ~/rpmbuild/SPECS/nodejs.spec
+
+          # Build RPM package in Fedora RISC-V container
+          # This ensures proper RPM build environment with native systemd-rpm-macros support
+          echo "Running rpmbuild in fedorariscv/base container..."
+          docker run --rm \
+            -v ~/rpmbuild:/root/rpmbuild:Z \
+            -v ${GITHUB_WORKSPACE}/recipes/riscv64-native:/recipes:ro \
+            fedorariscv/base:latest \
+            bash -c '
+              set -euo pipefail
+
+              # Install build dependencies
+              echo "Installing RPM build dependencies..."
+              dnf install -y rpm-build rpmdevtools rpmlint systemd-rpm-macros
+
+              # Build package
+              echo "Building nodejs RPM..."
+              cd /root/rpmbuild/SPECS
+              rpmbuild -bb nodejs.spec
+
+              # List built packages
+              echo ""
+              echo "Built RPM packages:"
+              ls -lh /root/rpmbuild/RPMS/riscv64/
+            '
+
+          # Show results on host
+          echo ""
+          echo "RPM package built successfully:"
+          ls -lh ~/rpmbuild/RPMS/riscv64/
+
+          # Run rpmlint checks (suppress output to avoid SIGPIPE with thousands of warnings)
+          echo ""
+          echo "Running rpmlint checks..."
+          docker run --rm \
+            -v ~/rpmbuild:/root/rpmbuild:ro \
+            fedorariscv/base:latest \
+            bash -c 'dnf install -y rpmlint >/dev/null 2>&1 && rpmlint /root/rpmbuild/RPMS/riscv64/nodejs-*.rpm 2>&1 | head -20' || true
+          echo "rpmlint check complete (output limited to avoid pipe overflow)"
+
+          # Package info
+          echo ""
+          echo "============================================"
+          echo "=== Package Information ==="
+          echo "============================================"
+          rpm -qip ~/rpmbuild/RPMS/riscv64/nodejs-*.rpm
+
+          echo ""
+          echo "=== Package Contents (first 50 files) ==="
+          rpm -qlp ~/rpmbuild/RPMS/riscv64/nodejs-*.rpm 2>/dev/null | head -50 || true
 
           # Move package to release directory
-          mv nodejs-${VERSION_NO_V}-1.riscv64.rpm "${RELEASE_DIR}/"
+          mv ~/rpmbuild/RPMS/riscv64/nodejs-*.rpm "${RELEASE_DIR}/"
 
-          echo "Created: nodejs-${VERSION_NO_V}-1.riscv64.rpm"
-          ls -lh "${RELEASE_DIR}/nodejs-${VERSION_NO_V}-1.riscv64.rpm"
-
-          # Clean up staging
-          rm -rf package-staging
+          echo ""
+          echo "Created: $(ls ${RELEASE_DIR}/nodejs-*.rpm)"
+          ls -lh "${RELEASE_DIR}/nodejs-"*.rpm
 
       - name: Generate checksums
         if: steps.build.outputs.success == 'true'

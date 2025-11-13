@@ -10,6 +10,11 @@ BuildArch:      riscv64
 
 AutoReqProv:    yes
 
+# Disable debug package generation (pre-built binaries, no debug sources)
+%global debug_package %{nil}
+%global _enable_debug_package 0
+%global _build_id_links none
+
 %description
 Node.js is a JavaScript runtime built on Chrome's V8 JavaScript engine.
 This package provides Node.js v%{version} built natively for RISC-V64

@@ -218,8 +218,7 @@ jobs:
         if: steps.build.outputs.success == 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ruby ruby-dev rpm rpmlint
-          sudo rpm --initdb || { echo "Failed to initialize RPM database"; exit 1; }
+          sudo apt-get install -y ruby ruby-dev rpm
           sudo gem install fpm -v 1.15.1
 
       - name: Build Debian package
@@ -285,22 +284,46 @@ jobs:
           cp "${RELEASE_DIR}/node-${VERSION}-linux-riscv64.tar.xz" ~/rpmbuild/SOURCES/
 
           # Copy spec file and update version
-          cp recipes/riscv64-native/nodejs.spec ~/rpmbuild/SPECS/
+          cp ${GITHUB_WORKSPACE}/recipes/riscv64-native/nodejs.spec ~/rpmbuild/SPECS/
           sed -i "s/^Version:.*/Version:        ${VERSION_NO_V}/" ~/rpmbuild/SPECS/nodejs.spec
 
-          # Build RPM package (building on native riscv64, no --target needed)
-          echo "Running rpmbuild..."
-          cd ~/rpmbuild/SPECS
-          rpmbuild -bb nodejs.spec
+          # Build RPM package in Fedora RISC-V container
+          # This ensures proper RPM build environment with native systemd-rpm-macros support
+          echo "Running rpmbuild in fedorariscv/base container..."
+          docker run --rm \
+            -v ~/rpmbuild:/root/rpmbuild:Z \
+            -v ${GITHUB_WORKSPACE}/recipes/riscv64-native:/recipes:ro \
+            fedorariscv/base:latest \
+            bash -c '
+              set -euo pipefail
 
+              # Install build dependencies
+              echo "Installing RPM build dependencies..."
+              dnf install -y rpm-build rpmdevtools rpmlint systemd-rpm-macros
+
+              # Build package
+              echo "Building nodejs RPM..."
+              cd /root/rpmbuild/SPECS
+              rpmbuild -bb nodejs.spec
+
+              # List built packages
+              echo ""
+              echo "Built RPM packages:"
+              ls -lh /root/rpmbuild/RPMS/riscv64/
+            '
+
+          # Show results on host
           echo ""
-          echo "Built RPM package:"
+          echo "RPM package built successfully:"
           ls -lh ~/rpmbuild/RPMS/riscv64/
 
           # Run rpmlint checks
           echo ""
           echo "Running rpmlint checks..."
-          rpmlint ~/rpmbuild/RPMS/riscv64/nodejs-*.rpm || true
+          docker run --rm \
+            -v ~/rpmbuild:/root/rpmbuild:ro \
+            fedorariscv/base:latest \
+            bash -c 'dnf install -y rpmlint && rpmlint /root/rpmbuild/RPMS/riscv64/nodejs-*.rpm' || true
 
           # Package info
           echo ""

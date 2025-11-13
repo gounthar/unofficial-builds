@@ -218,7 +218,7 @@ jobs:
         if: steps.build.outputs.success == 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ruby ruby-dev rpm
+          sudo apt-get install -y ruby ruby-dev rpm rpmlint
           sudo rpm --initdb || { echo "Failed to initialize RPM database"; exit 1; }
           sudo gem install fpm -v 1.15.1
 
@@ -265,56 +265,60 @@ jobs:
       - name: Build RPM package
         if: steps.build.outputs.success == 'true'
         run: |
+          set -euo pipefail
+
           VERSION="${{ matrix.version }}"
           VERSION_NO_V="${VERSION#v}"
           RELEASE_DIR="${GITHUB_WORKSPACE}/staging/release/${VERSION}"
 
-          # Create staging directory for package
-          mkdir -p package-staging
+          echo "Building RPM package for Node.js ${VERSION}..."
 
-          # Extract tarball to prepare for packaging
-          tar -xJf "${RELEASE_DIR}/node-${VERSION}-linux-riscv64.tar.xz" \
-            -C package-staging --strip-components=1 || { echo "RPM package: tar extraction failed"; exit 1; }
+          # Set up RPM build tree
+          mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 
-          # Create .rpm package
-          echo "Creating RPM package with fpm..."
+          # Clean previous builds
+          rm -f ~/rpmbuild/RPMS/riscv64/nodejs-*.rpm
+          rm -f ~/rpmbuild/SOURCES/node-${VERSION}-linux-riscv64.tar.xz
+          rm -f ~/rpmbuild/SPECS/nodejs.spec
 
-          # Remove problematic npm docs directory entirely to avoid file-not-found issues
-          echo "Removing npm docs to prevent packaging issues..."
-          rm -rf package-staging/lib/node_modules/npm/docs
+          # Copy tarball to SOURCES
+          cp "${RELEASE_DIR}/node-${VERSION}-linux-riscv64.tar.xz" ~/rpmbuild/SOURCES/
 
-          # Remove any broken symlinks that might cause rpmbuild to fail
-          find package-staging/ -type l ! -exec test -e {} \; -delete 2>/dev/null || true
+          # Copy spec file and update version
+          cp recipes/riscv64-native/nodejs.spec ~/rpmbuild/SPECS/
+          sed -i "s/^Version:.*/Version:        ${VERSION_NO_V}/" ~/rpmbuild/SPECS/nodejs.spec
 
-          fpm -s dir -t rpm \
-            -n nodejs \
-            -v "${VERSION_NO_V}" \
-            --iteration 1 \
-            --architecture riscv64 \
-            --description "Node.js JavaScript runtime - RISC-V 64-bit native build" \
-            --url "https://github.com/${{ github.repository }}" \
-            --license "MIT" \
-            --maintainer "Bruno Verachten <https://github.com/gounthar>" \
-            --rpm-auto-add-directories \
-            --rpm-autoreqprov \
-            --prefix /usr \
-            -C package-staging/ \
-            . || {
-            echo "FPM failed! Checking what files exist in package-staging..."
-            ls -la package-staging/lib/node_modules/npm/ 2>/dev/null || true
-            echo "Looking for generated spec file..."
-            find /tmp -name "nodejs.spec" -type f -exec cat {} \; 2>/dev/null || true
-            exit 1
-          }
+          # Build RPM package (building on native riscv64, no --target needed)
+          echo "Running rpmbuild..."
+          cd ~/rpmbuild/SPECS
+          rpmbuild -bb nodejs.spec
+
+          echo ""
+          echo "Built RPM package:"
+          ls -lh ~/rpmbuild/RPMS/riscv64/
+
+          # Run rpmlint checks
+          echo ""
+          echo "Running rpmlint checks..."
+          rpmlint ~/rpmbuild/RPMS/riscv64/nodejs-*.rpm || true
+
+          # Package info
+          echo ""
+          echo "============================================"
+          echo "=== Package Information ==="
+          echo "============================================"
+          rpm -qip ~/rpmbuild/RPMS/riscv64/nodejs-*.rpm
+
+          echo ""
+          echo "=== Package Contents (first 50 files) ==="
+          rpm -qlp ~/rpmbuild/RPMS/riscv64/nodejs-*.rpm | head -50
 
           # Move package to release directory
-          mv nodejs-${VERSION_NO_V}-1.riscv64.rpm "${RELEASE_DIR}/"
+          mv ~/rpmbuild/RPMS/riscv64/nodejs-*.rpm "${RELEASE_DIR}/"
 
-          echo "Created: nodejs-${VERSION_NO_V}-1.riscv64.rpm"
-          ls -lh "${RELEASE_DIR}/nodejs-${VERSION_NO_V}-1.riscv64.rpm"
-
-          # Clean up staging
-          rm -rf package-staging
+          echo ""
+          echo "Created: $(ls ${RELEASE_DIR}/nodejs-*.rpm)"
+          ls -lh "${RELEASE_DIR}/nodejs-"*.rpm
 
       - name: Generate checksums
         if: steps.build.outputs.success == 'true'

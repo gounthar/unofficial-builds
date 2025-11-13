@@ -26,7 +26,6 @@ architecture on actual riscv64 hardware (Banana Pi F3).
 install -d %{buildroot}%{_bindir}
 install -d %{buildroot}%{_libdir}/node_modules
 install -d %{buildroot}%{_includedir}/node
-install -d %{buildroot}%{_datadir}/systemtap/tapset
 install -d %{buildroot}%{_mandir}/man1
 
 # Install binaries
@@ -44,11 +43,6 @@ cp -pr include/* %{buildroot}%{_includedir}/node/
 # Install man pages
 cp -pr share/man/man1/* %{buildroot}%{_mandir}/man1/
 
-# Install systemtap tapset
-if [ -d share/systemtap/tapset ]; then
-  cp -pr share/systemtap/tapset/* %{buildroot}%{_datadir}/systemtap/tapset/
-fi
-
 %files
 %license LICENSE
 %doc README.md
@@ -59,7 +53,6 @@ fi
 %{_libdir}/node_modules/
 %{_includedir}/node/
 %{_mandir}/man1/*
-%{_datadir}/systemtap/tapset/*
 
 %changelog
 * Wed Nov 13 2025 Bruno Verachten <gounthar@gmail.com> - 24.11.1-1

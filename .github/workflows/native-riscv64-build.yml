@@ -335,7 +335,7 @@ jobs:
 
           echo ""
           echo "=== Package Contents (first 50 files) ==="
-          rpm -qlp ~/rpmbuild/RPMS/riscv64/nodejs-*.rpm | head -50
+          rpm -qlp ~/rpmbuild/RPMS/riscv64/nodejs-*.rpm 2>/dev/null | head -50 || true
 
           # Move package to release directory
           mv ~/rpmbuild/RPMS/riscv64/nodejs-*.rpm "${RELEASE_DIR}/"

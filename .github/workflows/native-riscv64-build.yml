@@ -278,11 +278,15 @@ jobs:
 
           # Create .rpm package
           echo "Creating RPM package with fpm..."
+
+          # Remove problematic npm docs directory entirely to avoid file-not-found issues
+          echo "Removing npm docs to prevent packaging issues..."
+          rm -rf package-staging/lib/node_modules/npm/docs
+
           # Remove any broken symlinks that might cause rpmbuild to fail
           find package-staging/ -type l ! -exec test -e {} \; -delete 2>/dev/null || true
 
           fpm -s dir -t rpm \
-            --verbose \
             -n nodejs \
             -v "${VERSION_NO_V}" \
             --iteration 1 \
@@ -295,11 +299,12 @@ jobs:
             --depends "openssl-libs >= 3.0.0" \
             --depends "zlib" \
             --rpm-auto-add-directories \
-            --exclude "**/npm/docs/output/**" \
             --prefix /usr \
             -C package-staging/ \
             . || {
-            echo "FPM failed! Looking for generated spec file..."
+            echo "FPM failed! Checking what files exist in package-staging..."
+            ls -la package-staging/lib/node_modules/npm/ 2>/dev/null || true
+            echo "Looking for generated spec file..."
             find /tmp -name "nodejs.spec" -type f -exec cat {} \; 2>/dev/null || true
             exit 1
           }

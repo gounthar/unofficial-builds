@@ -317,13 +317,14 @@ jobs:
           echo "RPM package built successfully:"
           ls -lh ~/rpmbuild/RPMS/riscv64/
 
-          # Run rpmlint checks
+          # Run rpmlint checks (suppress output to avoid SIGPIPE with thousands of warnings)
           echo ""
           echo "Running rpmlint checks..."
           docker run --rm \
             -v ~/rpmbuild:/root/rpmbuild:ro \
             fedorariscv/base:latest \
-            bash -c 'dnf install -y rpmlint && rpmlint /root/rpmbuild/RPMS/riscv64/nodejs-*.rpm' || true
+            bash -c 'dnf install -y rpmlint >/dev/null 2>&1 && rpmlint /root/rpmbuild/RPMS/riscv64/nodejs-*.rpm 2>&1 | head -20' || true
+          echo "rpmlint check complete (output limited to avoid pipe overflow)"
 
           # Package info
           echo ""

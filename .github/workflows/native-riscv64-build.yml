@@ -219,6 +219,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ruby ruby-dev rpm
+          sudo rpm --initdb
           sudo gem install fpm -v 1.15.1
 
       - name: Build Debian package

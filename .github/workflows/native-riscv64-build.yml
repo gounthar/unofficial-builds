@@ -295,10 +295,8 @@ jobs:
             --url "https://github.com/${{ github.repository }}" \
             --license "MIT" \
             --maintainer "Bruno Verachten <https://github.com/gounthar>" \
-            --depends "glibc >= 2.34" \
-            --depends "openssl-libs >= 3.0.0" \
-            --depends "zlib" \
             --rpm-auto-add-directories \
+            --rpm-autoreqprov \
             --prefix /usr \
             -C package-staging/ \
             . || {

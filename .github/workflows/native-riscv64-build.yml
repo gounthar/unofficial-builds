@@ -278,6 +278,9 @@ jobs:
 
           # Create .rpm package
           echo "Creating RPM package with fpm..."
+          # Remove any broken symlinks that might cause rpmbuild to fail
+          find package-staging/ -type l ! -exec test -e {} \; -delete 2>/dev/null || true
+
           fpm -s dir -t rpm \
             --verbose \
             -n nodejs \
@@ -291,6 +294,8 @@ jobs:
             --depends "glibc >= 2.34" \
             --depends "openssl-libs >= 3.0.0" \
             --depends "zlib" \
+            --rpm-auto-add-directories \
+            --exclude "**/npm/docs/output/**" \
             --prefix /usr \
             -C package-staging/ \
             . || {

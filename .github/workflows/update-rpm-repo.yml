@@ -11,7 +11,7 @@ on:
         type: string
 
 env:
-  REPO_BRANCH: apt-repo
+  REPO_BRANCH: rpm-repo
   DEBIAN_FRONTEND: noninteractive
 
 jobs:

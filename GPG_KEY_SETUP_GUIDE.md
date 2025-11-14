@@ -91,7 +91,7 @@ You have two options to add secrets:
 
 ### Option A: Using GitHub Web Interface (Recommended)
 
-1. Go to: https://github.com/nodejs/nodejs-unofficial-builds/settings/secrets/actions
+1. Go to: [GitHub Actions Secrets](https://github.com/nodejs/nodejs-unofficial-builds/settings/secrets/actions)
 
 2. Click **"New repository secret"**
 

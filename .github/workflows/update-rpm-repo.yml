@@ -21,7 +21,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout apt-repo branch
+      - name: Checkout rpm-repo branch
         uses: actions/checkout@v4
         with:
           ref: ${{ env.REPO_BRANCH }}

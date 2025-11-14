@@ -1,0 +1,219 @@
+name: Update APT Repository
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Node.js version to add to repository (e.g., v24.11.0)'
+        required: true
+        type: string
+
+env:
+  REPO_BRANCH: apt-repo
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  update-apt-repo:
+    name: Update APT Repository with Node.js Packages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout apt-repo branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.REPO_BRANCH }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Checkout main branch (for config files)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main-branch
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y reprepro gnupg2
+
+      - name: Import GPG key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          # Trust the key ultimately
+          echo -e "5\ny\n" | gpg --command-fd 0 --expert --edit-key ${{ secrets.GPG_KEY_ID }} trust quit || true
+
+      - name: Determine version to process
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            # Extract from release tag
+            VERSION="${{ github.event.release.tag_name }}"
+          fi
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Processing version: ${VERSION}"
+
+      - name: Download Debian package from release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          VERSION_NO_V="${VERSION#v}"
+
+          echo "Downloading .deb package for ${VERSION}..."
+
+          # Download the .deb file from GitHub release
+          gh release download "${VERSION}" \
+            --repo ${{ github.repository }} \
+            --pattern "nodejs_${VERSION_NO_V}-1_riscv64.deb" \
+            --dir /tmp/packages || {
+              echo "Failed to download .deb package for ${VERSION}"
+              exit 1
+            }
+
+          ls -lh /tmp/packages/
+
+      - name: Set up repository structure
+        run: |
+          # Create conf directory and copy distributions file
+          mkdir -p conf
+          cp main-branch/repo-config/distributions conf/
+
+          # Create initial directory structure (reprepro will manage pool/ and dists/)
+          mkdir -p pool dists
+
+      - name: Add package to repository
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          VERSION_NO_V="${VERSION#v}"
+
+          DEB_FILE="/tmp/packages/nodejs_${VERSION_NO_V}-1_riscv64.deb"
+
+          if [ ! -f "$DEB_FILE" ]; then
+            echo "Error: Debian package not found at $DEB_FILE"
+            exit 1
+          fi
+
+          echo "Adding package to repository: $DEB_FILE"
+
+          # Add package to reprepro repository
+          # Use --ignore=wrongdistribution if package was built for a different distribution
+          reprepro includedeb trixie "$DEB_FILE" || \
+          reprepro --ignore=wrongdistribution includedeb trixie "$DEB_FILE"
+
+          echo "Package added successfully"
+
+          # Show repository contents
+          echo ""
+          echo "Repository contents:"
+          reprepro list trixie
+
+      - name: Verify repository integrity
+        run: |
+          echo "Verifying repository integrity..."
+          reprepro check trixie
+
+          echo ""
+          echo "Repository structure:"
+          tree -L 3 dists/ pool/ || find dists/ pool/ -type f
+
+      - name: Copy public GPG key
+        run: |
+          # Ensure the public key is available at the repository root
+          cp main-branch/KEY.gpg KEY.gpg
+
+      - name: Commit and push changes with retry logic
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Function to attempt commit and push with retry
+          attempt_push() {
+            local max_attempts=5
+            local attempt=1
+
+            while [ $attempt -le $max_attempts ]; do
+              echo "Attempt $attempt of $max_attempts"
+
+              # Pull latest changes
+              git pull --rebase origin ${{ env.REPO_BRANCH }} || {
+                echo "Pull failed, will retry..."
+                sleep $((5 + RANDOM % 6))
+                attempt=$((attempt + 1))
+                continue
+              }
+
+              # Stage all changes
+              git add -A
+
+              # Check if there are changes to commit
+              if git diff --staged --quiet; then
+                echo "No changes to commit"
+                return 0
+              fi
+
+              # Commit
+              git commit -m "feat: add Node.js ${VERSION} package to APT repository
+
+- Added nodejs_${VERSION#v}-1_riscv64.deb
+- Updated repository metadata
+- Updated GPG signatures" || {
+                echo "Commit failed, will retry..."
+                sleep $((5 + RANDOM % 6))
+                attempt=$((attempt + 1))
+                continue
+              }
+
+              # Push
+              git push origin ${{ env.REPO_BRANCH }} && {
+                echo "Push successful!"
+                return 0
+              } || {
+                echo "Push failed, will retry..."
+                git reset --soft HEAD~1
+                sleep $((5 + RANDOM % 6))
+                attempt=$((attempt + 1))
+              }
+            done
+
+            echo "Failed after $max_attempts attempts"
+            return 1
+          }
+
+          attempt_push
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "# APT Repository Update Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Repository**: https://gounthar.github.io/nodejs-unofficial-builds" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Installation Instructions" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "# Add GPG key" >> $GITHUB_STEP_SUMMARY
+          echo "curl -fsSL https://gounthar.github.io/nodejs-unofficial-builds/KEY.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/nodejs-unofficial.gpg" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# Add repository" >> $GITHUB_STEP_SUMMARY
+          echo 'echo "deb [arch=riscv64 signed-by=/etc/apt/keyrings/nodejs-unofficial.gpg] https://gounthar.github.io/nodejs-unofficial-builds trixie main" | sudo tee /etc/apt/sources.list.d/nodejs-unofficial.list' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# Install Node.js" >> $GITHUB_STEP_SUMMARY
+          echo "sudo apt update" >> $GITHUB_STEP_SUMMARY
+          echo "sudo apt install nodejs" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

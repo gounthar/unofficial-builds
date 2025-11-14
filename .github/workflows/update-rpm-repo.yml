@@ -1,0 +1,276 @@
+name: Update RPM Repository
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Node.js version to add to repository (e.g., v24.11.0)'
+        required: true
+        type: string
+
+env:
+  REPO_BRANCH: apt-repo
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  update-rpm-repo:
+    name: Update RPM Repository with Node.js Packages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout apt-repo branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.REPO_BRANCH }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Checkout main branch (for config files)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main-branch
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y createrepo-c rpm gnupg2
+
+      - name: Import GPG key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          # Trust the key ultimately
+          echo -e "5\ny\n" | gpg --command-fd 0 --expert --edit-key ${{ secrets.GPG_KEY_ID }} trust quit || true
+
+      - name: Determine version to process
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            # Extract from release tag
+            VERSION="${{ github.event.release.tag_name }}"
+          fi
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Processing version: ${VERSION}"
+
+      - name: Download RPM package from release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          VERSION_NO_V="${VERSION#v}"
+
+          echo "Downloading .rpm package for ${VERSION}..."
+
+          # Create temporary directory
+          mkdir -p /tmp/packages
+
+          # Download the .rpm file from GitHub release
+          gh release download "${VERSION}" \
+            --repo ${{ github.repository }} \
+            --pattern "nodejs-${VERSION_NO_V}-1.riscv64.rpm" \
+            --dir /tmp/packages || {
+              echo "Failed to download .rpm package for ${VERSION}"
+              exit 1
+            }
+
+          ls -lh /tmp/packages/
+
+      - name: Set up repository structure
+        run: |
+          # Create RPM repository directory structure
+          mkdir -p rpm/fedora/riscv64
+
+      - name: Add package to repository
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          VERSION_NO_V="${VERSION#v}"
+
+          RPM_FILE="/tmp/packages/nodejs-${VERSION_NO_V}-1.riscv64.rpm"
+
+          if [ ! -f "$RPM_FILE" ]; then
+            echo "Error: RPM package not found at $RPM_FILE"
+            exit 1
+          fi
+
+          echo "Adding package to repository: $RPM_FILE"
+
+          # Copy RPM to repository
+          cp "$RPM_FILE" rpm/fedora/riscv64/
+
+          echo "Package added successfully"
+
+      - name: Update repository metadata
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          cd rpm/fedora/riscv64
+
+          echo "Generating repository metadata..."
+
+          # Create/update repository metadata
+          createrepo_c .
+
+          echo "Signing repository metadata..."
+
+          # Sign the repomd.xml file
+          if [ -n "$GPG_PASSPHRASE" ]; then
+            gpg --batch --yes --pinentry-mode loopback \
+              --passphrase "$GPG_PASSPHRASE" \
+              --detach-sign --armor \
+              repodata/repomd.xml
+          else
+            gpg --batch --yes \
+              --detach-sign --armor \
+              repodata/repomd.xml
+          fi
+
+          echo "Repository metadata updated and signed"
+
+          # Show repository contents
+          echo ""
+          echo "Repository contents:"
+          ls -lh
+          echo ""
+          echo "Metadata files:"
+          ls -lh repodata/
+
+      - name: Verify repository
+        run: |
+          echo "Verifying repository structure..."
+
+          cd rpm/fedora/riscv64
+
+          # Check that all required files exist
+          if [ ! -f "repodata/repomd.xml" ]; then
+            echo "Error: repomd.xml not found"
+            exit 1
+          fi
+
+          if [ ! -f "repodata/repomd.xml.asc" ]; then
+            echo "Error: repomd.xml.asc (GPG signature) not found"
+            exit 1
+          fi
+
+          # Verify GPG signature
+          gpg --verify repodata/repomd.xml.asc repodata/repomd.xml
+
+          echo "Repository verification successful"
+
+          # List all RPM packages
+          echo ""
+          echo "Available packages:"
+          ls -lh *.rpm
+
+      - name: Copy public GPG key and repo config
+        run: |
+          # Ensure the public key is available at the repository root
+          cp main-branch/KEY.gpg KEY.gpg
+
+          # Copy the .repo file for easy user configuration
+          cp main-branch/repo-config/nodejs-unofficial.repo nodejs-unofficial.repo
+
+      - name: Commit and push changes with retry logic
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Function to attempt commit and push with retry
+          attempt_push() {
+            local max_attempts=5
+            local attempt=1
+
+            while [ $attempt -le $max_attempts ]; do
+              echo "Attempt $attempt of $max_attempts"
+
+              # Pull latest changes
+              git pull --rebase origin ${{ env.REPO_BRANCH }} || {
+                echo "Pull failed, will retry..."
+                sleep $((5 + RANDOM % 6))
+                attempt=$((attempt + 1))
+                continue
+              }
+
+              # Stage all changes
+              git add -A
+
+              # Check if there are changes to commit
+              if git diff --staged --quiet; then
+                echo "No changes to commit"
+                return 0
+              fi
+
+              # Commit
+              git commit -m "feat: add Node.js ${VERSION} package to RPM repository
+
+- Added nodejs-${VERSION#v}-1.riscv64.rpm
+- Updated repository metadata with createrepo_c
+- Signed repomd.xml with GPG" || {
+                echo "Commit failed, will retry..."
+                sleep $((5 + RANDOM % 6))
+                attempt=$((attempt + 1))
+                continue
+              }
+
+              # Push
+              git push origin ${{ env.REPO_BRANCH }} && {
+                echo "Push successful!"
+                return 0
+              } || {
+                echo "Push failed, will retry..."
+                git reset --soft HEAD~1
+                sleep $((5 + RANDOM % 6))
+                attempt=$((attempt + 1))
+              }
+            done
+
+            echo "Failed after $max_attempts attempts"
+            return 1
+          }
+
+          attempt_push
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "# RPM Repository Update Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Repository**: https://gounthar.github.io/nodejs-unofficial-builds" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Installation Instructions" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "# Download and install repository configuration" >> $GITHUB_STEP_SUMMARY
+          echo "sudo curl -o /etc/yum.repos.d/nodejs-unofficial.repo https://gounthar.github.io/nodejs-unofficial-builds/nodejs-unofficial.repo" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# Install Node.js" >> $GITHUB_STEP_SUMMARY
+          echo "sudo dnf install nodejs" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Manual Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "# Create repository configuration manually" >> $GITHUB_STEP_SUMMARY
+          echo "sudo tee /etc/yum.repos.d/nodejs-unofficial.repo <<EOF" >> $GITHUB_STEP_SUMMARY
+          echo "[nodejs-unofficial-riscv64]" >> $GITHUB_STEP_SUMMARY
+          echo "name=Node.js Unofficial Builds - RISC-V 64" >> $GITHUB_STEP_SUMMARY
+          echo "baseurl=https://gounthar.github.io/nodejs-unofficial-builds/rpm/fedora/riscv64" >> $GITHUB_STEP_SUMMARY
+          echo "enabled=1" >> $GITHUB_STEP_SUMMARY
+          echo "gpgcheck=1" >> $GITHUB_STEP_SUMMARY
+          echo "gpgkey=https://gounthar.github.io/nodejs-unofficial-builds/KEY.gpg" >> $GITHUB_STEP_SUMMARY
+          echo "repo_gpgcheck=1" >> $GITHUB_STEP_SUMMARY
+          echo "EOF" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

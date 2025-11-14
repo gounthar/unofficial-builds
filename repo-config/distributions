@@ -1,0 +1,7 @@
+Origin: Node.js Unofficial Builds
+Label: nodejs-unofficial-builds
+Codename: trixie
+Architectures: riscv64
+Components: main
+Description: Node.js unofficial builds for RISC-V 64-bit
+SignWith: 56188341425B007407229B48FB1963FC3575A39D

@@ -213,14 +213,13 @@ jobs:
               fi
 
               # Commit
-              git commit -m "$(cat <<'EOF'
+              git commit -F - <<EOF || {
 feat: add Node.js ${VERSION} package to RPM repository
 
 - Added nodejs-${VERSION#v}-1.riscv64.rpm
 - Updated repository metadata with createrepo_c
 - Signed repomd.xml with GPG
 EOF
-)" || {
                 echo "Commit failed, will retry..."
                 sleep $((5 + RANDOM % 6))
                 attempt=$((attempt + 1))

@@ -1,0 +1,5 @@
+Component: main
+Origin: Node.js Unofficial Builds
+Label: nodejs-unofficial-builds
+Architecture: riscv64
+Description: Node.js unofficial builds for RISC-V 64-bit

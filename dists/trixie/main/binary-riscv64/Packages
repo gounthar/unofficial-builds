@@ -1,0 +1,18 @@
+Package: nodejs
+Version: 24.11.1-1
+License: MIT
+Vendor: none
+Architecture: riscv64
+Maintainer: Bruno Verachten <https://github.com/gounthar>
+Installed-Size: 185924
+Depends: libc6 (>= 2.34), libssl3 (>= 3.0.0), zlib1g (>= 1:1.2.11)
+Homepage: https://github.com/gounthar/unofficial-builds
+Priority: optional
+Section: default
+Filename: pool/main/n/nodejs/nodejs_24.11.1-1_riscv64.deb
+Size: 57477946
+SHA256: 5e689e77fc6935c8bc785a57844c8f88808305da99c6685c5d92ff9f4c0bccb7
+SHA1: 26cdb4104db2cd95de8ede3418c01c7da756894e
+MD5sum: 611eadca8cb977092cd9064c67955f33
+Description: Node.js JavaScript runtime - RISC-V 64-bit native build
+

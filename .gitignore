@@ -4,3 +4,24 @@
 .claude/
 CLAUDE.md
 CONTEXT.md
+
+# Local development artifacts
+.idea/
+nextjs-riscv64/
+staging/
+journal/
+.bridge-config
+.last_article_timestamp
+*.md.bak
+setup-runner.sh
+QUICKSTART-RUNNER.md
+RUNNER-SETUP.md
+linkedin-post-variations.md
+.env
+
+# Documentation from docker-dev analysis
+APT_YUM_REPOSITORY_INFRASTRUCTURE.md
+REPOSITORY_INFRASTRUCTURE_INDEX.md
+REPOSITORY_ARCHITECTURE_DIAGRAM.txt
+SUMMARY.txt
+README_DOCKER_REPO_DOCS.md

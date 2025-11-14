@@ -1,0 +1,7 @@
+[nodejs-unofficial-riscv64]
+name=Node.js Unofficial Builds - RISC-V 64
+baseurl=https://gounthar.github.io/nodejs-unofficial-builds/rpm/fedora/riscv64
+enabled=1
+gpgcheck=1
+gpgkey=https://gounthar.github.io/nodejs-unofficial-builds/KEY.gpg
+repo_gpgcheck=1

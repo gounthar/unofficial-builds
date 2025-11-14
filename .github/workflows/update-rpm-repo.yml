@@ -11,7 +11,7 @@ on:
         type: string
 
 env:
-  REPO_BRANCH: rpm-repo
+  REPO_BRANCH: apt-repo
   DEBIAN_FRONTEND: noninteractive
 
 jobs:
@@ -21,7 +21,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout rpm-repo branch
+      - name: Checkout apt-repo branch
         uses: actions/checkout@v4
         with:
           ref: ${{ env.REPO_BRANCH }}

@@ -76,7 +76,7 @@ jobs:
           # Download the .rpm file from GitHub release
           gh release download "${VERSION}" \
             --repo ${{ github.repository }} \
-            --pattern "nodejs-${VERSION_NO_V}-1.riscv64.rpm" \
+            --pattern "nodejs-${VERSION_NO_V}-*.riscv64.rpm" \
             --dir /tmp/packages || {
               echo "Failed to download .rpm package for ${VERSION}"
               exit 1
@@ -94,7 +94,7 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           VERSION_NO_V="${VERSION#v}"
 
-          RPM_FILE="/tmp/packages/nodejs-${VERSION_NO_V}-1.riscv64.rpm"
+          RPM_FILE=$(ls /tmp/packages/nodejs-${VERSION_NO_V}-*.riscv64.rpm 2>/dev/null | head -1)
 
           if [ ! -f "$RPM_FILE" ]; then
             echo "Error: RPM package not found at $RPM_FILE"
@@ -244,13 +244,13 @@ jobs:
           echo "# RPM Repository Update Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Repository**: https://gounthar.github.io/nodejs-unofficial-builds" >> $GITHUB_STEP_SUMMARY
+          echo "**Repository**: https://gounthar.github.io/unofficial-builds" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Installation Instructions" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
           echo "# Download and install repository configuration" >> $GITHUB_STEP_SUMMARY
-          echo "sudo curl -o /etc/yum.repos.d/nodejs-unofficial.repo https://gounthar.github.io/nodejs-unofficial-builds/nodejs-unofficial.repo" >> $GITHUB_STEP_SUMMARY
+          echo "sudo curl -o /etc/yum.repos.d/nodejs-unofficial.repo https://gounthar.github.io/unofficial-builds/nodejs-unofficial.repo" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "# Install Node.js" >> $GITHUB_STEP_SUMMARY
           echo "sudo dnf install nodejs" >> $GITHUB_STEP_SUMMARY
@@ -263,10 +263,10 @@ jobs:
           echo "sudo tee /etc/yum.repos.d/nodejs-unofficial.repo <<EOF" >> $GITHUB_STEP_SUMMARY
           echo "[nodejs-unofficial-riscv64]" >> $GITHUB_STEP_SUMMARY
           echo "name=Node.js Unofficial Builds - RISC-V 64" >> $GITHUB_STEP_SUMMARY
-          echo "baseurl=https://gounthar.github.io/nodejs-unofficial-builds/rpm/fedora/riscv64" >> $GITHUB_STEP_SUMMARY
+          echo "baseurl=https://gounthar.github.io/unofficial-builds/rpm/fedora/riscv64" >> $GITHUB_STEP_SUMMARY
           echo "enabled=1" >> $GITHUB_STEP_SUMMARY
           echo "gpgcheck=1" >> $GITHUB_STEP_SUMMARY
-          echo "gpgkey=https://gounthar.github.io/nodejs-unofficial-builds/KEY.gpg" >> $GITHUB_STEP_SUMMARY
+          echo "gpgkey=https://gounthar.github.io/unofficial-builds/KEY.gpg" >> $GITHUB_STEP_SUMMARY
           echo "repo_gpgcheck=1" >> $GITHUB_STEP_SUMMARY
           echo "EOF" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY

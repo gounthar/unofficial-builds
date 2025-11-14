@@ -167,11 +167,14 @@ jobs:
               fi
 
               # Commit
-              git commit -m "feat: add Node.js ${VERSION} package to APT repository
+              git commit -m "$(cat <<'EOF'
+feat: add Node.js ${VERSION} package to APT repository
 
 - Added nodejs_${VERSION#v}-1_riscv64.deb
 - Updated repository metadata
-- Updated GPG signatures" || {
+- Updated GPG signatures
+EOF
+)" || {
                 echo "Commit failed, will retry..."
                 sleep $((5 + RANDOM % 6))
                 attempt=$((attempt + 1))

@@ -117,8 +117,6 @@ You have two options to add secrets:
 
 ```bash
 # Make sure you're in the repository directory
-cd /mnt/c/support/users/dev/riscv/nodejs-unofficial-builds
-
 # Add GPG_PRIVATE_KEY
 gh secret set GPG_PRIVATE_KEY < /tmp/gpg-private-key.asc
 
@@ -151,7 +149,7 @@ The public key needs to be accessible to users. We'll add it to the apt-repo bra
 
 ```bash
 # Copy public key to the repository (we'll commit it later)
-cp /tmp/gpg-public-key.asc /mnt/c/support/users/dev/riscv/nodejs-unofficial-builds/KEY.gpg
+cp /tmp/gpg-public-key.asc ./KEY.gpg
 ```
 
 ---

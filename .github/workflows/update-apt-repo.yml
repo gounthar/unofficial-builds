@@ -198,16 +198,16 @@ jobs:
           echo "# APT Repository Update Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Repository**: https://gounthar.github.io/nodejs-unofficial-builds" >> $GITHUB_STEP_SUMMARY
+          echo "**Repository**: https://gounthar.github.io/unofficial-builds" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Installation Instructions" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
           echo "# Add GPG key" >> $GITHUB_STEP_SUMMARY
-          echo "curl -fsSL https://gounthar.github.io/nodejs-unofficial-builds/KEY.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/nodejs-unofficial.gpg" >> $GITHUB_STEP_SUMMARY
+          echo "curl -fsSL https://gounthar.github.io/unofficial-builds/KEY.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/nodejs-unofficial.gpg" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "# Add repository" >> $GITHUB_STEP_SUMMARY
-          echo 'echo "deb [arch=riscv64 signed-by=/etc/apt/keyrings/nodejs-unofficial.gpg] https://gounthar.github.io/nodejs-unofficial-builds trixie main" | sudo tee /etc/apt/sources.list.d/nodejs-unofficial.list' >> $GITHUB_STEP_SUMMARY
+          echo 'echo "deb [arch=riscv64 signed-by=/etc/apt/keyrings/nodejs-unofficial.gpg] https://gounthar.github.io/unofficial-builds trixie main" | sudo tee /etc/apt/sources.list.d/nodejs-unofficial.list' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "# Install Node.js" >> $GITHUB_STEP_SUMMARY
           echo "sudo apt update" >> $GITHUB_STEP_SUMMARY

@@ -253,7 +253,7 @@ jobs:
           echo "sudo curl -o /etc/yum.repos.d/nodejs-unofficial.repo https://gounthar.github.io/unofficial-builds/nodejs-unofficial.repo" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "# Install Node.js" >> $GITHUB_STEP_SUMMARY
-          echo "sudo dnf install nodejs" >> $GITHUB_STEP_SUMMARY
+          echo "sudo dnf install nodejs-unofficial" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Manual Configuration" >> $GITHUB_STEP_SUMMARY

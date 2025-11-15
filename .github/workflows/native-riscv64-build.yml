@@ -455,13 +455,15 @@ jobs:
           - Debian: libc6 >= 2.34, libssl3, zlib1g
           - RPM: glibc >= 2.34, openssl >= 3.0.0, zlib
 
-          **Installation Prefix:** \`/usr\`
+          **Installation Location:** \`/opt/nodejs-unofficial/\`
 
-          **Included Binaries:**
-          - \`/usr/bin/node\`
-          - \`/usr/bin/npm\`
-          - \`/usr/bin/npx\`
-          - \`/usr/bin/corepack\`
+          **Symlinks in PATH:**
+          - \`/usr/local/bin/node\` → \`/opt/nodejs-unofficial/bin/node\`
+          - \`/usr/local/bin/npm\` → \`/opt/nodejs-unofficial/bin/npm\`
+          - \`/usr/local/bin/npx\` → \`/opt/nodejs-unofficial/bin/npx\`
+          - \`/usr/local/bin/corepack\` → \`/opt/nodejs-unofficial/bin/corepack\`
+
+          **Man Pages:** Available via \`/etc/profile.d/nodejs-unofficial.sh\` (sets MANPATH)
 
           ## Checksums
 

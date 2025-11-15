@@ -39,7 +39,8 @@ install -d %{buildroot}/opt/nodejs-unofficial/bin
 install -d %{buildroot}/opt/nodejs-unofficial/lib/node_modules
 install -d %{buildroot}/opt/nodejs-unofficial/include
 install -d %{buildroot}/opt/nodejs-unofficial/share/man/man1
-install -d %{buildroot}%{_bindir}
+install -d %{buildroot}/usr/local/bin
+install -d %{buildroot}/etc/profile.d
 
 # Install to /opt/nodejs-unofficial
 install -p -m 0755 bin/node %{buildroot}/opt/nodejs-unofficial/bin/node
@@ -51,20 +52,29 @@ cp -pr lib/* %{buildroot}/opt/nodejs-unofficial/lib/node_modules/
 cp -pr include/* %{buildroot}/opt/nodejs-unofficial/include/
 cp -pr share/man/man1/* %{buildroot}/opt/nodejs-unofficial/share/man/man1/
 
-# Create symlinks in /usr/local/bin for PATH
-ln -s /opt/nodejs-unofficial/bin/node %{buildroot}%{_bindir}/node
-ln -s /opt/nodejs-unofficial/bin/npm %{buildroot}%{_bindir}/npm
-ln -s /opt/nodejs-unofficial/bin/npx %{buildroot}%{_bindir}/npx
-ln -s /opt/nodejs-unofficial/bin/corepack %{buildroot}%{_bindir}/corepack
+# Create symlinks in /usr/local/bin for PATH (works in all shell types)
+ln -s /opt/nodejs-unofficial/bin/node %{buildroot}/usr/local/bin/node
+ln -s /opt/nodejs-unofficial/bin/npm %{buildroot}/usr/local/bin/npm
+ln -s /opt/nodejs-unofficial/bin/npx %{buildroot}/usr/local/bin/npx
+ln -s /opt/nodejs-unofficial/bin/corepack %{buildroot}/usr/local/bin/corepack
+
+# Create profile.d script for MANPATH
+cat > %{buildroot}/etc/profile.d/nodejs-unofficial.sh <<'EOF'
+#!/bin/sh
+# Add Node.js unofficial builds man pages
+export MANPATH="/opt/nodejs-unofficial/share/man:${MANPATH:-}"
+EOF
+chmod 644 %{buildroot}/etc/profile.d/nodejs-unofficial.sh
 
 %files
 %license LICENSE
 %doc README.md
 /opt/nodejs-unofficial/
-%{_bindir}/node
-%{_bindir}/npm
-%{_bindir}/npx
-%{_bindir}/corepack
+/usr/local/bin/node
+/usr/local/bin/npm
+/usr/local/bin/npx
+/usr/local/bin/corepack
+/etc/profile.d/nodejs-unofficial.sh
 
 %changelog
 * Wed Nov 13 2025 Bruno Verachten <gounthar@gmail.com> - 24.11.1-1

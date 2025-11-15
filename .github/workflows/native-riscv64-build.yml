@@ -229,34 +229,45 @@ jobs:
           RELEASE_DIR="${GITHUB_WORKSPACE}/staging/release/${VERSION}"
 
           # Create staging directory for package
-          mkdir -p package-staging
+          mkdir -p package-staging/opt/nodejs-unofficial
+          mkdir -p package-staging/etc/profile.d
 
           # Extract tarball to prepare for packaging
           tar -xJf "${RELEASE_DIR}/node-${VERSION}-linux-riscv64.tar.xz" \
-            -C package-staging --strip-components=1 || { echo "Debian package: tar extraction failed"; exit 1; }
+            -C package-staging/opt/nodejs-unofficial --strip-components=1 || { echo "Debian package: tar extraction failed"; exit 1; }
+
+          # Create profile.d script to add to PATH
+          cat > package-staging/etc/profile.d/nodejs-unofficial.sh <<'EOF'
+          # Add Node.js unofficial builds to PATH
+          export PATH="/opt/nodejs-unofficial/bin:$PATH"
+          export MANPATH="/opt/nodejs-unofficial/share/man:${MANPATH:-}"
+          EOF
+          chmod 644 package-staging/etc/profile.d/nodejs-unofficial.sh
 
           # Create .deb package
           fpm -s dir -t deb \
-            -n nodejs \
+            -n nodejs-unofficial \
             -v "${VERSION_NO_V}" \
             --iteration 1 \
             --architecture riscv64 \
-            --description "Node.js JavaScript runtime - RISC-V 64-bit native build" \
+            --description "Node.js JavaScript runtime - RISC-V 64-bit native build (unofficial)\nThis package installs Node.js to /opt/nodejs-unofficial/ and does not conflict with system Node.js packages.\nIncludes: node, npm, npx, and corepack" \
             --url "https://github.com/${{ github.repository }}" \
             --license "MIT" \
             --maintainer "Bruno Verachten <https://github.com/gounthar>" \
             --depends "libc6 >= 2.34" \
             --depends "libssl3 >= 3.0.0" \
             --depends "zlib1g >= 1:1.2.11" \
-            --prefix /usr \
+            --conflicts "nodejs-unofficial-old" \
+            --provides "nodejs-riscv64" \
+            --deb-no-default-config-files \
             -C package-staging/ \
             .
 
           # Move package to release directory
-          mv nodejs_${VERSION_NO_V}-1_riscv64.deb "${RELEASE_DIR}/"
+          mv nodejs-unofficial_${VERSION_NO_V}-1_riscv64.deb "${RELEASE_DIR}/"
 
-          echo "Created: nodejs_${VERSION_NO_V}-1_riscv64.deb"
-          ls -lh "${RELEASE_DIR}/nodejs_${VERSION_NO_V}-1_riscv64.deb"
+          echo "Created: nodejs-unofficial_${VERSION_NO_V}-1_riscv64.deb"
+          ls -lh "${RELEASE_DIR}/nodejs-unofficial_${VERSION_NO_V}-1_riscv64.deb"
 
           # Clean up staging
           rm -rf package-staging
@@ -350,7 +361,7 @@ jobs:
           cd ${GITHUB_WORKSPACE}/staging/release/${{ matrix.version }}
           sha256sum node-*.tar.gz > SHASUMS256.txt 2>/dev/null || true
           sha256sum node-*.tar.xz >> SHASUMS256.txt 2>/dev/null || true
-          sha256sum nodejs_*.deb >> SHASUMS256.txt 2>/dev/null || true
+          sha256sum nodejs-unofficial_*.deb >> SHASUMS256.txt 2>/dev/null || true
           sha256sum nodejs-*.rpm >> SHASUMS256.txt 2>/dev/null || true
           cat SHASUMS256.txt
 
@@ -390,10 +401,11 @@ jobs:
 
           \`\`\`bash
           # Download and install .deb package
-          curl -LO https://github.com/${{ github.repository }}/releases/download/${VERSION}/nodejs_${VERSION#v}-1_riscv64.deb
-          sudo dpkg -i nodejs_${VERSION#v}-1_riscv64.deb
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${VERSION}/nodejs-unofficial_${VERSION#v}-1_riscv64.deb
+          sudo dpkg -i nodejs-unofficial_${VERSION#v}-1_riscv64.deb
 
-          # Verify installation
+          # Verify installation (requires new shell or source /etc/profile)
+          source /etc/profile.d/nodejs-unofficial.sh
           node --version
           npm --version
           \`\`\`
@@ -426,7 +438,7 @@ jobs:
 
           ## Available Artifacts
 
-          - \`nodejs_${VERSION#v}-1_riscv64.deb\` - Debian package
+          - \`nodejs-unofficial_${VERSION#v}-1_riscv64.deb\` - Debian package (installs to /opt/nodejs-unofficial/)
           - \`nodejs-${VERSION#v}-1.riscv64.rpm\` - RPM package
           - \`node-${VERSION#v}-linux-riscv64.tar.gz\` - Gzipped tarball
           - \`node-${VERSION#v}-linux-riscv64.tar.xz\` - XZ compressed tarball
@@ -478,7 +490,7 @@ jobs:
             --notes-file release_notes.md \
             ${GITHUB_WORKSPACE}/staging/release/${VERSION}/node-*.tar.gz \
             ${GITHUB_WORKSPACE}/staging/release/${VERSION}/node-*.tar.xz \
-            ${GITHUB_WORKSPACE}/staging/release/${VERSION}/nodejs_*.deb \
+            ${GITHUB_WORKSPACE}/staging/release/${VERSION}/nodejs-unofficial_*.deb \
             ${GITHUB_WORKSPACE}/staging/release/${VERSION}/nodejs-*.rpm \
             ${GITHUB_WORKSPACE}/staging/release/${VERSION}/SHASUMS256.txt
 

@@ -73,7 +73,7 @@ jobs:
           # Download the .deb file from GitHub release
           gh release download "${VERSION}" \
             --repo ${{ github.repository }} \
-            --pattern "nodejs_${VERSION_NO_V}-1_riscv64.deb" \
+            --pattern "nodejs-unofficial_${VERSION_NO_V}-1_riscv64.deb" \
             --dir /tmp/packages || {
               echo "Failed to download .deb package for ${VERSION}"
               exit 1
@@ -97,7 +97,7 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           VERSION_NO_V="${VERSION#v}"
 
-          DEB_FILE="/tmp/packages/nodejs_${VERSION_NO_V}-1_riscv64.deb"
+          DEB_FILE="/tmp/packages/nodejs-unofficial_${VERSION_NO_V}-1_riscv64.deb"
 
           if [ ! -f "$DEB_FILE" ]; then
             echo "Error: Debian package not found at $DEB_FILE"

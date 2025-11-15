@@ -229,34 +229,51 @@ jobs:
           RELEASE_DIR="${GITHUB_WORKSPACE}/staging/release/${VERSION}"
 
           # Create staging directory for package
-          mkdir -p package-staging
+          mkdir -p package-staging/opt/nodejs-unofficial
+          mkdir -p package-staging/etc/profile.d
+          mkdir -p package-staging/usr/local/bin
 
           # Extract tarball to prepare for packaging
           tar -xJf "${RELEASE_DIR}/node-${VERSION}-linux-riscv64.tar.xz" \
-            -C package-staging --strip-components=1 || { echo "Debian package: tar extraction failed"; exit 1; }
+            -C package-staging/opt/nodejs-unofficial --strip-components=1 || { echo "Debian package: tar extraction failed"; exit 1; }
+
+          # Create symlinks in /usr/local/bin for PATH (works in non-interactive shells)
+          ln -s /opt/nodejs-unofficial/bin/node package-staging/usr/local/bin/node
+          ln -s /opt/nodejs-unofficial/bin/npm package-staging/usr/local/bin/npm
+          ln -s /opt/nodejs-unofficial/bin/npx package-staging/usr/local/bin/npx
+          ln -s /opt/nodejs-unofficial/bin/corepack package-staging/usr/local/bin/corepack
+
+          # Create profile.d script for MANPATH
+          cat > package-staging/etc/profile.d/nodejs-unofficial.sh <<'EOF'
+          # Add Node.js unofficial builds man pages
+          export MANPATH="/opt/nodejs-unofficial/share/man:${MANPATH:-}"
+          EOF
+          chmod 644 package-staging/etc/profile.d/nodejs-unofficial.sh
 
           # Create .deb package
           fpm -s dir -t deb \
-            -n nodejs \
+            -n nodejs-unofficial \
             -v "${VERSION_NO_V}" \
             --iteration 1 \
             --architecture riscv64 \
-            --description "Node.js JavaScript runtime - RISC-V 64-bit native build" \
+            --description "Node.js JavaScript runtime - RISC-V 64-bit native build (unofficial)\nThis package installs Node.js to /opt/nodejs-unofficial/ and does not conflict with system Node.js packages.\nIncludes: node, npm, npx, and corepack" \
             --url "https://github.com/${{ github.repository }}" \
             --license "MIT" \
             --maintainer "Bruno Verachten <https://github.com/gounthar>" \
             --depends "libc6 >= 2.34" \
             --depends "libssl3 >= 3.0.0" \
             --depends "zlib1g >= 1:1.2.11" \
-            --prefix /usr \
+            --conflicts "nodejs-unofficial-old" \
+            --provides "nodejs-riscv64" \
+            --deb-no-default-config-files \
             -C package-staging/ \
             .
 
           # Move package to release directory
-          mv nodejs_${VERSION_NO_V}-1_riscv64.deb "${RELEASE_DIR}/"
+          mv nodejs-unofficial_${VERSION_NO_V}-1_riscv64.deb "${RELEASE_DIR}/"
 
-          echo "Created: nodejs_${VERSION_NO_V}-1_riscv64.deb"
-          ls -lh "${RELEASE_DIR}/nodejs_${VERSION_NO_V}-1_riscv64.deb"
+          echo "Created: nodejs-unofficial_${VERSION_NO_V}-1_riscv64.deb"
+          ls -lh "${RELEASE_DIR}/nodejs-unofficial_${VERSION_NO_V}-1_riscv64.deb"
 
           # Clean up staging
           rm -rf package-staging
@@ -276,7 +293,7 @@ jobs:
           mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 
           # Clean previous builds
-          rm -f ~/rpmbuild/RPMS/riscv64/nodejs-*.rpm
+          rm -f ~/rpmbuild/RPMS/riscv64/nodejs-unofficial-*.rpm
           rm -f ~/rpmbuild/SOURCES/node-${VERSION}-linux-riscv64.tar.xz
           rm -f ~/rpmbuild/SPECS/nodejs.spec
 
@@ -302,7 +319,7 @@ jobs:
               dnf install -y rpm-build rpmdevtools rpmlint systemd-rpm-macros
 
               # Build package
-              echo "Building nodejs RPM..."
+              echo "Building nodejs-unofficial RPM..."
               cd /root/rpmbuild/SPECS
               rpmbuild -bb nodejs.spec
 
@@ -323,7 +340,7 @@ jobs:
           docker run --rm \
             -v ~/rpmbuild:/root/rpmbuild:ro \
             fedorariscv/base:latest \
-            bash -c 'dnf install -y rpmlint >/dev/null 2>&1 && rpmlint /root/rpmbuild/RPMS/riscv64/nodejs-*.rpm 2>&1 | head -20' || true
+            bash -c 'dnf install -y rpmlint >/dev/null 2>&1 && rpmlint /root/rpmbuild/RPMS/riscv64/nodejs-unofficial-*.rpm 2>&1 | head -20' || true
           echo "rpmlint check complete (output limited to avoid pipe overflow)"
 
           # Package info
@@ -331,18 +348,18 @@ jobs:
           echo "============================================"
           echo "=== Package Information ==="
           echo "============================================"
-          rpm -qip ~/rpmbuild/RPMS/riscv64/nodejs-*.rpm
+          rpm -qip ~/rpmbuild/RPMS/riscv64/nodejs-unofficial-*.rpm
 
           echo ""
           echo "=== Package Contents (first 50 files) ==="
-          rpm -qlp ~/rpmbuild/RPMS/riscv64/nodejs-*.rpm 2>/dev/null | head -50 || true
+          rpm -qlp ~/rpmbuild/RPMS/riscv64/nodejs-unofficial-*.rpm 2>/dev/null | head -50 || true
 
           # Move package to release directory
-          mv ~/rpmbuild/RPMS/riscv64/nodejs-*.rpm "${RELEASE_DIR}/"
+          mv ~/rpmbuild/RPMS/riscv64/nodejs-unofficial-*.rpm "${RELEASE_DIR}/"
 
           echo ""
-          echo "Created: $(ls ${RELEASE_DIR}/nodejs-*.rpm)"
-          ls -lh "${RELEASE_DIR}/nodejs-"*.rpm
+          echo "Created: $(ls ${RELEASE_DIR}/nodejs-unofficial-*.rpm)"
+          ls -lh "${RELEASE_DIR}/nodejs-unofficial-"*.rpm
 
       - name: Generate checksums
         if: steps.build.outputs.success == 'true'
@@ -350,8 +367,8 @@ jobs:
           cd ${GITHUB_WORKSPACE}/staging/release/${{ matrix.version }}
           sha256sum node-*.tar.gz > SHASUMS256.txt 2>/dev/null || true
           sha256sum node-*.tar.xz >> SHASUMS256.txt 2>/dev/null || true
-          sha256sum nodejs_*.deb >> SHASUMS256.txt 2>/dev/null || true
-          sha256sum nodejs-*.rpm >> SHASUMS256.txt 2>/dev/null || true
+          sha256sum nodejs-unofficial_*.deb >> SHASUMS256.txt 2>/dev/null || true
+          sha256sum nodejs-unofficial-*.rpm >> SHASUMS256.txt 2>/dev/null || true
           cat SHASUMS256.txt
 
       - name: Create GitHub Release
@@ -390,10 +407,10 @@ jobs:
 
           \`\`\`bash
           # Download and install .deb package
-          curl -LO https://github.com/${{ github.repository }}/releases/download/${VERSION}/nodejs_${VERSION#v}-1_riscv64.deb
-          sudo dpkg -i nodejs_${VERSION#v}-1_riscv64.deb
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${VERSION}/nodejs-unofficial_${VERSION#v}-1_riscv64.deb
+          sudo dpkg -i nodejs-unofficial_${VERSION#v}-1_riscv64.deb
 
-          # Verify installation
+          # Verify installation (works immediately via /usr/local/bin symlinks)
           node --version
           npm --version
           \`\`\`
@@ -402,10 +419,10 @@ jobs:
 
           \`\`\`bash
           # Download and install .rpm package
-          curl -LO https://github.com/${{ github.repository }}/releases/download/${VERSION}/nodejs-${VERSION#v}-1.riscv64.rpm
-          sudo rpm -i nodejs-${VERSION#v}-1.riscv64.rpm
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${VERSION}/nodejs-unofficial-${VERSION#v}-1.fc*.riscv64.rpm
+          sudo dnf install ./nodejs-unofficial-${VERSION#v}-1.fc*.riscv64.rpm
 
-          # Verify installation
+          # Verify installation (works immediately via /usr/local/bin symlinks)
           node --version
           npm --version
           \`\`\`
@@ -426,8 +443,8 @@ jobs:
 
           ## Available Artifacts
 
-          - \`nodejs_${VERSION#v}-1_riscv64.deb\` - Debian package
-          - \`nodejs-${VERSION#v}-1.riscv64.rpm\` - RPM package
+          - \`nodejs-unofficial_${VERSION#v}-1_riscv64.deb\` - Debian package (installs to /opt/nodejs-unofficial/)
+          - \`nodejs-unofficial-${VERSION#v}-1.fc*.riscv64.rpm\` - RPM package (installs to /opt/nodejs-unofficial/)
           - \`node-${VERSION#v}-linux-riscv64.tar.gz\` - Gzipped tarball
           - \`node-${VERSION#v}-linux-riscv64.tar.xz\` - XZ compressed tarball
           - \`SHASUMS256.txt\` - SHA256 checksums for all artifacts
@@ -438,13 +455,15 @@ jobs:
           - Debian: libc6 >= 2.34, libssl3, zlib1g
           - RPM: glibc >= 2.34, openssl >= 3.0.0, zlib
 
-          **Installation Prefix:** \`/usr\`
+          **Installation Location:** \`/opt/nodejs-unofficial/\`
 
-          **Included Binaries:**
-          - \`/usr/bin/node\`
-          - \`/usr/bin/npm\`
-          - \`/usr/bin/npx\`
-          - \`/usr/bin/corepack\`
+          **Symlinks in PATH:**
+          - \`/usr/local/bin/node\` → \`/opt/nodejs-unofficial/bin/node\`
+          - \`/usr/local/bin/npm\` → \`/opt/nodejs-unofficial/bin/npm\`
+          - \`/usr/local/bin/npx\` → \`/opt/nodejs-unofficial/bin/npx\`
+          - \`/usr/local/bin/corepack\` → \`/opt/nodejs-unofficial/bin/corepack\`
+
+          **Man Pages:** Available via \`/etc/profile.d/nodejs-unofficial.sh\` (sets MANPATH)
 
           ## Checksums
 
@@ -478,8 +497,8 @@ jobs:
             --notes-file release_notes.md \
             ${GITHUB_WORKSPACE}/staging/release/${VERSION}/node-*.tar.gz \
             ${GITHUB_WORKSPACE}/staging/release/${VERSION}/node-*.tar.xz \
-            ${GITHUB_WORKSPACE}/staging/release/${VERSION}/nodejs_*.deb \
-            ${GITHUB_WORKSPACE}/staging/release/${VERSION}/nodejs-*.rpm \
+            ${GITHUB_WORKSPACE}/staging/release/${VERSION}/nodejs-unofficial_*.deb \
+            ${GITHUB_WORKSPACE}/staging/release/${VERSION}/nodejs-unofficial-*.rpm \
             ${GITHUB_WORKSPACE}/staging/release/${VERSION}/SHASUMS256.txt
 
           echo "Release ${VERSION} created successfully!"

@@ -178,6 +178,11 @@ jobs:
           # Copy the .repo file for easy user configuration
           cp main-branch/repo-config/nodejs-unofficial.repo nodejs-unofficial.repo
 
+      - name: Clean up main-branch checkout
+        run: |
+          # Remove main-branch directory to prevent it from being committed to rpm-repo
+          rm -rf main-branch
+
       - name: Commit and push changes with retry logic
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

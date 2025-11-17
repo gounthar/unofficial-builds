@@ -132,6 +132,11 @@ jobs:
           # Ensure the public key is available at the repository root
           cp main-branch/KEY.gpg KEY.gpg
 
+      - name: Clean up main-branch checkout
+        run: |
+          # Remove main-branch directory to prevent it from being committed to apt-repo
+          rm -rf main-branch
+
       - name: Commit and push changes with retry logic
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

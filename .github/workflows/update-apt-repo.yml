@@ -149,16 +149,16 @@ jobs:
             while [ $attempt -le $max_attempts ]; do
               echo "Attempt $attempt of $max_attempts"
 
-              # Pull latest changes
-              git pull --rebase origin ${{ env.REPO_BRANCH }} || {
+              # Stage changes from reprepro first
+              git add -A
+
+              # Pull latest changes with autostash
+              git pull --rebase --autostash origin ${{ env.REPO_BRANCH }} || {
                 echo "Pull failed, will retry..."
                 sleep $((5 + RANDOM % 6))
                 attempt=$((attempt + 1))
                 continue
               }
-
-              # Stage all changes
-              git add -A
 
               # Check if there are changes to commit
               if git diff --staged --quiet; then

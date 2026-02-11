@@ -536,6 +536,8 @@ jobs:
 
           if [ "$FAILURES" -eq 0 ]; then
             echo "Both repository update workflows triggered successfully"
+          elif [ "$FAILURES" -eq 1 ]; then
+            echo "::warning::One of the two repository update dispatches failed for ${VERSION}"
           elif [ "$FAILURES" -eq 2 ]; then
             echo "::error::Both repository update dispatches failed for ${VERSION}"
           fi

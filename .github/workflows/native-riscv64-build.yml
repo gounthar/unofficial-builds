@@ -96,6 +96,9 @@ jobs:
     needs: check-releases
     if: needs.check-releases.outputs.has_new == 'true'
     runs-on: [self-hosted, Linux, RISCV64]
+    permissions:
+      contents: write
+      actions: write
     timeout-minutes: 1200  # 20 hours - riscv64 builds can take 15+ hours
     strategy:
       matrix:
@@ -509,18 +512,35 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${{ matrix.version }}"
+          FAILURES=0
 
           echo "Triggering APT repository update for ${VERSION}..."
-          gh workflow run update-apt-repo.yml \
+          if gh workflow run update-apt-repo.yml \
             --repo ${{ github.repository }} \
-            --field version="${VERSION}" || echo "Warning: Failed to trigger APT repo update"
+            --field version="${VERSION}"; then
+            echo "APT repository update dispatched successfully"
+          else
+            echo "::warning::Failed to trigger APT repository update for ${VERSION}"
+            FAILURES=$((FAILURES + 1))
+          fi
 
           echo "Triggering RPM repository update for ${VERSION}..."
-          gh workflow run update-rpm-repo.yml \
+          if gh workflow run update-rpm-repo.yml \
             --repo ${{ github.repository }} \
-            --field version="${VERSION}" || echo "Warning: Failed to trigger RPM repo update"
+            --field version="${VERSION}"; then
+            echo "RPM repository update dispatched successfully"
+          else
+            echo "::warning::Failed to trigger RPM repository update for ${VERSION}"
+            FAILURES=$((FAILURES + 1))
+          fi
 
-          echo "Repository update workflows triggered"
+          if [ "$FAILURES" -eq 0 ]; then
+            echo "Both repository update workflows triggered successfully"
+          elif [ "$FAILURES" -eq 1 ]; then
+            echo "::warning::One of the two repository update dispatches failed for ${VERSION}"
+          elif [ "$FAILURES" -eq 2 ]; then
+            echo "::error::Both repository update dispatches failed for ${VERSION}"
+          fi
 
       - name: Notify build status
         if: always()

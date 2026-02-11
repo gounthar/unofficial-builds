@@ -503,6 +503,25 @@ jobs:
 
           echo "Release ${VERSION} created successfully!"
 
+      - name: Trigger APT and RPM repository updates
+        if: steps.build.outputs.success == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ matrix.version }}"
+
+          echo "Triggering APT repository update for ${VERSION}..."
+          gh workflow run update-apt-repo.yml \
+            --repo ${{ github.repository }} \
+            --field version="${VERSION}" || echo "Warning: Failed to trigger APT repo update"
+
+          echo "Triggering RPM repository update for ${VERSION}..."
+          gh workflow run update-rpm-repo.yml \
+            --repo ${{ github.repository }} \
+            --field version="${VERSION}" || echo "Warning: Failed to trigger RPM repo update"
+
+          echo "Repository update workflows triggered"
+
       - name: Notify build status
         if: always()
         run: |

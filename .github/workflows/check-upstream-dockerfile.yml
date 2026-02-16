@@ -39,6 +39,10 @@ jobs:
           UPSTREAM_REPO: ${{ steps.ref.outputs.repo }}
         run: |
           HEAD_COMMIT=$(gh api "repos/${UPSTREAM_REPO}/commits/main" --jq '.sha')
+          if [ -z "${HEAD_COMMIT}" ]; then
+            echo "::error::Failed to fetch upstream HEAD commit"
+            exit 1
+          fi
           echo "head_commit=${HEAD_COMMIT}" >> "$GITHUB_OUTPUT"
           echo "Upstream HEAD: ${HEAD_COMMIT}"
 
@@ -150,6 +154,7 @@ jobs:
           git diff --cached --quiet || {
             git commit -m "chore: update upstream Dockerfile reference (no relevant changes)"
             git push -u origin "${BRANCH}"
+            gh label create upstream-sync --description "Upstream Dockerfile changes need syncing" --color "d93f0b" 2>/dev/null || true
             gh pr create \
               --title "chore: update upstream Dockerfile reference" \
               --body "Automated update of \`docker/UPSTREAM_REF\` commit hash. The upstream repository moved forward but none of the tracked Dockerfile files changed." \

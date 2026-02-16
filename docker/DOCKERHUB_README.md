@@ -43,7 +43,7 @@ CMD ["node", "server.js"]
 ### Interactive shell
 
 ```bash
-docker run -it --platform linux/riscv64 gounthar/node-riscv64:latest
+docker run -it --platform linux/riscv64 gounthar/node-riscv64:latest bash
 ```
 
 ## Why?

@@ -142,3 +142,12 @@ jobs:
           echo "  gounthar/node-riscv64:${VERSION}-trixie-slim"
           echo "  gounthar/node-riscv64:latest"
           echo "  gounthar/node-riscv64:slim"
+
+      - name: Update Docker Hub description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: gounthar/node-riscv64
+          readme-filepath: docker/DOCKERHUB_README.md
+          short-description: "Unofficial Node.js Docker images for RISC-V 64-bit (riscv64) on Debian Trixie"

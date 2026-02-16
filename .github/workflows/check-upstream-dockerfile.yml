@@ -131,7 +131,10 @@ jobs:
             --label "upstream-sync"
 
       - name: Update UPSTREAM_REF for unchanged files
-        if: steps.ref.outputs.tracked_commit != steps.upstream.outputs.head_commit && steps.compare.outputs.files_changed != 'true'
+        if: >-
+          steps.ref.outputs.tracked_commit != steps.upstream.outputs.head_commit
+          && steps.compare.outcome == 'success'
+          && steps.compare.outputs.files_changed != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_COMMIT: ${{ steps.upstream.outputs.head_commit }}

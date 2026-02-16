@@ -9,6 +9,7 @@ on:
 permissions:
   contents: write
   issues: write
+  pull-requests: write
 
 jobs:
   check-upstream:
@@ -128,14 +129,29 @@ jobs:
       - name: Update UPSTREAM_REF for unchanged files
         if: steps.ref.outputs.tracked_commit != steps.upstream.outputs.head_commit && steps.compare.outputs.files_changed != 'true'
         env:
+          GH_TOKEN: ${{ github.token }}
           HEAD_COMMIT: ${{ steps.upstream.outputs.head_commit }}
         run: |
-          sed -i "s/^commit=.*/commit=${HEAD_COMMIT}/" docker/UPSTREAM_REF
+          BRANCH="chore/update-upstream-ref-${HEAD_COMMIT:0:12}"
+
+          # Check if a PR already exists for this update
+          EXISTING_PR=$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number // empty')
+          if [ -n "${EXISTING_PR}" ]; then
+            echo "PR #${EXISTING_PR} already exists for this update, skipping"
+            exit 0
+          fi
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git checkout -b "${BRANCH}"
+          sed -i "s/^commit=.*/commit=${HEAD_COMMIT}/" docker/UPSTREAM_REF
           git add docker/UPSTREAM_REF
           git diff --cached --quiet || {
             git commit -m "chore: update upstream Dockerfile reference (no relevant changes)"
-            git push
+            git push -u origin "${BRANCH}"
+            gh pr create \
+              --title "chore: update upstream Dockerfile reference" \
+              --body "Automated update of \`docker/UPSTREAM_REF\` commit hash. The upstream repository moved forward but none of the tracked Dockerfile files changed." \
+              --label "upstream-sync"
           }

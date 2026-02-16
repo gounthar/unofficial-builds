@@ -41,6 +41,7 @@ jobs:
           VERSION="${VERSION#v}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "is_release=$( [ "${EVENT_NAME}" = "release" ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
           echo "Building Docker images for Node.js ${VERSION}"
 
       - name: Verify release assets exist
@@ -49,7 +50,7 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           echo "Checking release assets for ${TAG}..."
-          gh release view "${TAG}" --json assets --jq '.assets[].name' | grep -q "node-.*-linux-riscv64.tar.xz" || {
+          gh release view "${TAG}" --json assets --jq '.assets[].name' | grep -qE "^node-v[0-9.]+-linux-riscv64\.tar\.xz$" || {
             echo "Error: No riscv64 tarball found in release ${TAG}"
             exit 1
           }
@@ -73,6 +74,24 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Determine tags for trixie (full) variant
+        id: trixie-tags
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          IS_RELEASE: ${{ steps.version.outputs.is_release }}
+        run: |
+          TAGS="gounthar/node-riscv64:${VERSION}-trixie"
+          if [ "${IS_RELEASE}" = "true" ]; then
+            TAGS="${TAGS}
+          gounthar/node-riscv64:latest"
+          fi
+          # Use EOF delimiter for multiline output
+          {
+            echo "tags<<TAGS_EOF"
+            echo "${TAGS}"
+            echo "TAGS_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and push trixie (full) variant
         uses: docker/build-push-action@v6
         with:
@@ -83,9 +102,24 @@ jobs:
           build-args: |
             NODE_VERSION=${{ steps.version.outputs.version }}
             NODE_DOWNLOAD_URL=https://github.com/${{ github.repository }}/releases/download
-          tags: |
-            gounthar/node-riscv64:${{ steps.version.outputs.version }}-trixie
-            gounthar/node-riscv64:latest
+          tags: ${{ steps.trixie-tags.outputs.tags }}
+
+      - name: Determine tags for trixie-slim variant
+        id: slim-tags
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          IS_RELEASE: ${{ steps.version.outputs.is_release }}
+        run: |
+          TAGS="gounthar/node-riscv64:${VERSION}-trixie-slim"
+          if [ "${IS_RELEASE}" = "true" ]; then
+            TAGS="${TAGS}
+          gounthar/node-riscv64:slim"
+          fi
+          {
+            echo "tags<<TAGS_EOF"
+            echo "${TAGS}"
+            echo "TAGS_EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build and push trixie-slim variant
         uses: docker/build-push-action@v6
@@ -97,9 +131,7 @@ jobs:
           build-args: |
             NODE_VERSION=${{ steps.version.outputs.version }}
             NODE_DOWNLOAD_URL=https://github.com/${{ github.repository }}/releases/download
-          tags: |
-            gounthar/node-riscv64:${{ steps.version.outputs.version }}-trixie-slim
-            gounthar/node-riscv64:slim
+          tags: ${{ steps.slim-tags.outputs.tags }}
 
       - name: Verify pushed images
         env:

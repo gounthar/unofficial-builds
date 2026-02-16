@@ -1,0 +1,165 @@
+name: Check Upstream Dockerfile Changes
+
+on:
+  schedule:
+    # Run every Monday at 06:00 UTC
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  check-upstream:
+    name: Check for upstream Dockerfile changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read upstream reference
+        id: ref
+        run: |
+          # Parse UPSTREAM_REF file
+          REPO=$(grep '^repo=' docker/UPSTREAM_REF | cut -d= -f2)
+          TRACKED_COMMIT=$(grep '^commit=' docker/UPSTREAM_REF | cut -d= -f2)
+          FILES=$(grep '^files=' docker/UPSTREAM_REF | cut -d= -f2)
+          echo "repo=${REPO}" >> "$GITHUB_OUTPUT"
+          echo "tracked_commit=${TRACKED_COMMIT}" >> "$GITHUB_OUTPUT"
+          echo "files=${FILES}" >> "$GITHUB_OUTPUT"
+          echo "Tracking ${REPO} at commit ${TRACKED_COMMIT}"
+          echo "Watched files: ${FILES}"
+
+      - name: Get upstream HEAD
+        id: upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_REPO: ${{ steps.ref.outputs.repo }}
+        run: |
+          HEAD_COMMIT=$(gh api "repos/${UPSTREAM_REPO}/commits/main" --jq '.sha')
+          if [ -z "${HEAD_COMMIT}" ]; then
+            echo "::error::Failed to fetch upstream HEAD commit"
+            exit 1
+          fi
+          echo "head_commit=${HEAD_COMMIT}" >> "$GITHUB_OUTPUT"
+          echo "Upstream HEAD: ${HEAD_COMMIT}"
+
+      - name: Compare tracked files
+        id: compare
+        if: steps.ref.outputs.tracked_commit != steps.upstream.outputs.head_commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_REPO: ${{ steps.ref.outputs.repo }}
+          TRACKED_COMMIT: ${{ steps.ref.outputs.tracked_commit }}
+          HEAD_COMMIT: ${{ steps.upstream.outputs.head_commit }}
+          TRACKED_FILES: ${{ steps.ref.outputs.files }}
+        run: |
+          echo "Commits differ: ${TRACKED_COMMIT} -> ${HEAD_COMMIT}"
+          echo "Checking if tracked files actually changed..."
+
+          CHANGED_FILES=""
+          IFS=',' read -ra FILE_LIST <<< "${TRACKED_FILES}"
+
+          for file in "${FILE_LIST[@]}"; do
+            OLD_HASH=$(gh api "repos/${UPSTREAM_REPO}/contents/${file}?ref=${TRACKED_COMMIT}" --jq '.sha' 2>/dev/null || echo "missing")
+            NEW_HASH=$(gh api "repos/${UPSTREAM_REPO}/contents/${file}?ref=${HEAD_COMMIT}" --jq '.sha' 2>/dev/null || echo "missing")
+
+            if [ "${OLD_HASH}" != "${NEW_HASH}" ]; then
+              echo "  CHANGED: ${file}"
+              if [ -n "${CHANGED_FILES}" ]; then
+                CHANGED_FILES="${CHANGED_FILES},${file}"
+              else
+                CHANGED_FILES="${file}"
+              fi
+            else
+              echo "  unchanged: ${file}"
+            fi
+          done
+
+          if [ -n "${CHANGED_FILES}" ]; then
+            echo "files_changed=true" >> "$GITHUB_OUTPUT"
+            echo "changed_files=${CHANGED_FILES}" >> "$GITHUB_OUTPUT"
+          else
+            echo "files_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create issue for changed files
+        if: steps.compare.outputs.files_changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_REPO: ${{ steps.ref.outputs.repo }}
+          TRACKED_COMMIT: ${{ steps.ref.outputs.tracked_commit }}
+          HEAD_COMMIT: ${{ steps.upstream.outputs.head_commit }}
+          CHANGED: ${{ steps.compare.outputs.changed_files }}
+        run: |
+          # Check if an open issue already exists
+          EXISTING=$(gh issue list --label upstream-sync --state open --json number --jq '.[0].number // empty')
+          if [ -n "${EXISTING}" ]; then
+            echo "Open upstream-sync issue #${EXISTING} already exists, skipping"
+            exit 0
+          fi
+
+          # Ensure label exists
+          gh label create upstream-sync --description "Upstream Dockerfile changes need syncing" --color "d93f0b" 2>/dev/null || true
+
+          # Build changed files list
+          CHANGED_LIST=""
+          IFS=',' read -ra FILE_LIST <<< "${CHANGED}"
+          for file in "${FILE_LIST[@]}"; do
+            CHANGED_LIST="${CHANGED_LIST}
+          - \`${file}\`"
+          done
+
+          TRACKED_SHORT="${TRACKED_COMMIT:0:12}"
+          HEAD_SHORT="${HEAD_COMMIT:0:12}"
+
+          gh issue create \
+            --title "Upstream Docker Node.js Dockerfile changed" \
+            --body "The upstream [nodejs/docker-node](https://github.com/${UPSTREAM_REPO}) Dockerfiles have changed since our last sync.
+
+          **Tracked commit**: [\`${TRACKED_SHORT}\`](https://github.com/${UPSTREAM_REPO}/commit/${TRACKED_COMMIT})
+          **Current HEAD**: [\`${HEAD_SHORT}\`](https://github.com/${UPSTREAM_REPO}/commit/${HEAD_COMMIT})
+          **Diff**: [Compare changes](https://github.com/${UPSTREAM_REPO}/compare/${TRACKED_COMMIT}...${HEAD_COMMIT})
+
+          ### Changed files
+          ${CHANGED_LIST}
+
+          ### Action needed
+          Review the upstream changes and update our \`docker/\` Dockerfiles accordingly, then update \`docker/UPSTREAM_REF\` with the new commit hash." \
+            --label "upstream-sync"
+
+      - name: Update UPSTREAM_REF for unchanged files
+        if: >-
+          steps.ref.outputs.tracked_commit != steps.upstream.outputs.head_commit
+          && steps.compare.outcome == 'success'
+          && steps.compare.outputs.files_changed != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_COMMIT: ${{ steps.upstream.outputs.head_commit }}
+        run: |
+          BRANCH="chore/update-upstream-ref-${HEAD_COMMIT:0:12}"
+
+          # Check if a PR already exists for this update
+          EXISTING_PR=$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number // empty')
+          if [ -n "${EXISTING_PR}" ]; then
+            echo "PR #${EXISTING_PR} already exists for this update, skipping"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git checkout -b "${BRANCH}"
+          sed -i "s/^commit=.*/commit=${HEAD_COMMIT}/" docker/UPSTREAM_REF
+          git add docker/UPSTREAM_REF
+          git diff --cached --quiet || {
+            git commit -m "chore: update upstream Dockerfile reference (no relevant changes)"
+            git push -u origin "${BRANCH}"
+            gh label create upstream-sync --description "Upstream Dockerfile changes need syncing" --color "d93f0b" 2>/dev/null || true
+            gh pr create \
+              --title "chore: update upstream Dockerfile reference" \
+              --body "Automated update of \`docker/UPSTREAM_REF\` commit hash. The upstream repository moved forward but none of the tracked Dockerfile files changed." \
+              --label "upstream-sync"
+          }

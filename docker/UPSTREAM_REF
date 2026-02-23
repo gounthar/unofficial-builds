@@ -1,5 +1,5 @@
 # Upstream reference for nodejs/docker-node Dockerfiles
 # Used by check-upstream-dockerfile.yml to detect changes
 repo=nodejs/docker-node
-commit=74b0481b76e0af5b19d425ad34489e7393b23aff
+commit=5003dfda1d449fc1ab855b36d0ad0345d5331c74
 files=24/trixie/Dockerfile,24/trixie-slim/Dockerfile,24/trixie/docker-entrypoint.sh

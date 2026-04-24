@@ -186,6 +186,14 @@ jobs:
           echo "=== ccache stats before build ==="
           ccache -s || true
 
+          # Run configure before parallel make so GYP sets up the full Makefile
+          # and .deps directory tree before compilation starts. Without this,
+          # make -j$(nproc) races to write .d.raw dependency files into
+          # directories that don't exist yet (v8_initializers target failure).
+          echo "Configuring Node.js..."
+          ./configure --openssl-no-asm \
+            2>&1 | tee -a "${BUILD_DIR}/logs/build-${VERSION}.log"
+
           # Build Node.js
           echo "Starting Node.js build..."
           time make -j$(nproc) binary V= \
@@ -193,8 +201,7 @@ jobs:
             ARCH="riscv64" \
             VARIATION="" \
             DISTTYPE="release" \
-            CONFIG_FLAGS="--openssl-no-asm" \
-            2>&1 | tee "${BUILD_DIR}/logs/build-${VERSION}.log"
+            2>&1 | tee -a "${BUILD_DIR}/logs/build-${VERSION}.log"
 
           # Show ccache stats after build
           echo "=== ccache stats after build ==="

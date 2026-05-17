@@ -27,7 +27,11 @@ env:
 jobs:
   check-releases:
     name: Check for new Node.js releases
-    runs-on: [self-hosted, Linux, RISCV64]
+    # Only curls nodejs.org and lists GitHub releases, no RISC-V work. Keeping
+    # it on the self-hosted F3 runner adds a failure mode (runner-handoff miss)
+    # for no benefit and ties up the board for a metadata check. The build job
+    # below stays self-hosted and consumes this job's outputs unchanged.
+    runs-on: ubuntu-latest
     outputs:
       versions: ${{ steps.check.outputs.versions }}
       has_new: ${{ steps.check.outputs.has_new }}

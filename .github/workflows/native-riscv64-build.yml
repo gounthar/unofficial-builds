@@ -582,7 +582,12 @@ jobs:
     name: Build Summary
     needs: [check-releases, build]
     if: always()
-    runs-on: [self-hosted, Linux, RISCV64]
+    # Reporting only: writes markdown to $GITHUB_STEP_SUMMARY from context
+    # variables, no RISC-V work. Running it on the self-hosted F3 runner makes
+    # the whole run fail when a runner handoff misses after check-releases
+    # finishes ("job was not acquired by Runner of type self-hosted"). Use a
+    # GitHub-hosted runner so the summary never gates on F3 availability.
+    runs-on: ubuntu-latest
     steps:
       - name: Generate summary
         run: |

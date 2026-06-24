@@ -1,19 +1,19 @@
 Origin: Node.js Unofficial Builds
 Label: nodejs-unofficial-builds
 Codename: trixie
-Date: Fri, 22 May 2026 21:27:58 UTC
+Date: Wed, 24 Jun 2026 21:36:23 UTC
 Architectures: riscv64
 Components: main
 Description: Node.js unofficial builds for RISC-V 64-bit
 MD5Sum:
- fe6ef1d782057d5b29029c0b787df43c 881 main/binary-riscv64/Packages
- ac200a829e757eac8e865b80e964938b 557 main/binary-riscv64/Packages.gz
+ 8ab658a48235e1a739e5cf124573d1a7 881 main/binary-riscv64/Packages
+ 52d8d6b8b16350d4b115b15fa18c6b6d 558 main/binary-riscv64/Packages.gz
  a4ca7ceb0aca42d54091ade771b460d9 161 main/binary-riscv64/Release
 SHA1:
- feeff0b3440fca93cf0a2adef121ecfebc644a15 881 main/binary-riscv64/Packages
- 43639c841faa5b45850d6edb4af3d4c546dd9958 557 main/binary-riscv64/Packages.gz
+ a0dd2d86a650d7ad03becfeb8c33747dda894ce4 881 main/binary-riscv64/Packages
+ 81233f6ad8861f873a5acc9cee3148be2b65e972 558 main/binary-riscv64/Packages.gz
  f390dfd53c93e626f9fe302c0aeb3d0068c84af6 161 main/binary-riscv64/Release
 SHA256:
- e67fa44da3fff3da3ff93fb4382949e6d431f757e644d0d215301ed8d3033163 881 main/binary-riscv64/Packages
- 2b62dfcd783d5da7a99a95e33b2a3654230ca021840c5f4c30ee6b186c92d7f2 557 main/binary-riscv64/Packages.gz
+ b9594b07df53a9a9bb04d7ec05bbf25d98d5c2160e9132177dfc9062db955dcd 881 main/binary-riscv64/Packages
+ 850e139afb7036172b6b9dc69e6c4d864d8b5f6d5b3b1ee3fcfabbfe4c0cec26 558 main/binary-riscv64/Packages.gz
  e531f4a6e279bb2d502358ab42aadc1e9337f5e0a01258318630f2f60d612abf 161 main/binary-riscv64/Release

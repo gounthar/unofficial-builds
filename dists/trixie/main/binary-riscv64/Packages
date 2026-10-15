@@ -1,20 +1,20 @@
 Package: nodejs-unofficial
-Version: 24.21.0-1
+Version: 24.22.0-1
 License: MIT
 Vendor: none
 Architecture: riscv64
 Maintainer: Bruno Verachten <https://github.com/gounthar>
-Installed-Size: 191066
+Installed-Size: 191529
 Depends: libc6 (>= 2.34), libssl3 (>= 3.0.0), zlib1g (>= 1:1.2.11)
 Conflicts: nodejs-unofficial-old
 Provides: nodejs-riscv64
 Homepage: https://github.com/gounthar/unofficial-builds
 Priority: optional
 Section: default
-Filename: pool/main/n/nodejs-unofficial/nodejs-unofficial_24.21.0-1_riscv64.deb
-Size: 59396222
-SHA256: deef6b53e599f1dd1a15965b062dfbec0422c10cd0b9558b653f1c06b58a96b5
-SHA1: beb3bbbdda4dd4cd30614e0c2040b3ddc05d5fce
-MD5sum: eed24e9afe4f83375b38a9b349716992
+Filename: pool/main/n/nodejs-unofficial/nodejs-unofficial_24.22.0-1_riscv64.deb
+Size: 59578672
+SHA256: ad12f351b9ecda7307c2e89dcd114a43796fbab53639e14ad82a49100c739170
+SHA1: 03d7c512ed16270c1583f37ea42f1777d0d88785
+MD5sum: bbe8092330427041abdb392a5c8a20df
 Description: Node.js JavaScript runtime - RISC-V 64-bit native build (unofficial)\nThis package installs Node.js to /opt/nodejs-unofficial/ and does not conflict with system Node.js packages.\nIncludes: node, npm, npx, and corepack
 

@@ -87,6 +87,10 @@ cd "node-${FULLVERSION}"
 # Set up ccache
 export CC="ccache gcc"
 export CXX="ccache g++"
+# Highway 1.3.0 (Node v26+) disables its EMU128 fallback for GCC < 16, leaving
+# a 1-lane scalar target that V8's 16-lane JSON code cannot compile against.
+# Same flags as nodejs/unofficial-builds#249.
+export CXXFLAGS="-DHWY_BROKEN_EMU128=0 -DHWY_BROKEN_TARGETS=HWY_RVV"
 export CCACHE_DIR="$HOME/${BUILD_DIR}/ccache"
 export CCACHE_MAXSIZE="5G"
 

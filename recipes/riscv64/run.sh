@@ -24,6 +24,14 @@ export CC="ccache /usr/bin/riscv64-linux-gnu-gcc-14"
 export CXX="ccache /usr/bin/riscv64-linux-gnu-g++-14"
 # Required to allow GCC to be able to build on RISC-V
 export CXXFLAGS="-DHWY_BROKEN_EMU128=0 -DHWY_BROKEN_TARGETS=HWY_RVV"
+# V8 in Node v26 calls the MacroAssembler::FloatMinMaxHelper template from
+# maglev-ir-riscv.cc, but the template is only defined in another file, so the
+# mksnapshot link fails with an undefined reference. Backport of V8 7d081be20f98
+# (use the public Float64Min/Max wrappers); a no-op on trees that already have it.
+sed -i \
+  -e 's/__ FloatMinMaxHelper<double>(out, left, right, MaxMinKind::kMin);/__ Float64Min(out, left, right);/' \
+  -e 's/__ FloatMinMaxHelper<double>(out, left, right, MaxMinKind::kMax);/__ Float64Max(out, left, right);/' \
+  deps/v8/src/maglev/riscv/maglev-ir-riscv.cc
 
 make -j$(getconf _NPROCESSORS_ONLN) binary V= \
   DESTCPU="riscv64" \

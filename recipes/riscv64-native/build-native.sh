@@ -91,6 +91,14 @@ export CXX="ccache g++"
 # a 1-lane scalar target that V8's 16-lane JSON code cannot compile against.
 # Same flags as nodejs/unofficial-builds#249.
 export CXXFLAGS="-DHWY_BROKEN_EMU128=0 -DHWY_BROKEN_TARGETS=HWY_RVV"
+# V8 in Node v26 calls the MacroAssembler::FloatMinMaxHelper template from
+# maglev-ir-riscv.cc, but the template is only defined in another file, so the
+# mksnapshot link fails with an undefined reference. Backport of V8 7d081be20f98
+# (use the public Float64Min/Max wrappers); a no-op on trees that already have it.
+sed -i \
+  -e 's/__ FloatMinMaxHelper<double>(out, left, right, MaxMinKind::kMin);/__ Float64Min(out, left, right);/' \
+  -e 's/__ FloatMinMaxHelper<double>(out, left, right, MaxMinKind::kMax);/__ Float64Max(out, left, right);/' \
+  deps/v8/src/maglev/riscv/maglev-ir-riscv.cc
 export CCACHE_DIR="$HOME/${BUILD_DIR}/ccache"
 export CCACHE_MAXSIZE="5G"
 

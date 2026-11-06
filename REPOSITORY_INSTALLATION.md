@@ -42,11 +42,13 @@ corepack --version   # Node.js 24 and older only
 
 ### What Gets Installed
 
-The Node.js package installs to `/usr` with the following binaries:
-- `/usr/bin/node`
-- `/usr/bin/npm`
-- `/usr/bin/npx`
-- `/usr/bin/corepack` (Node.js 24 and older; Node.js 25+ no longer bundles it, install with `npm install -g corepack`)
+The Node.js package installs to `/opt/nodejs-unofficial/` and links these commands into `/usr/local/bin`:
+- `/usr/local/bin/node`
+- `/usr/local/bin/npm`
+- `/usr/local/bin/npx`
+- `/usr/local/bin/corepack` (Node.js 24 and older only)
+
+Node.js 25 and newer no longer bundle corepack. Install it with `sudo npm install -g --prefix /usr/local corepack`: without `--prefix`, npm installs into `/opt/nodejs-unofficial`, whose `bin` directory is not on `PATH`.
 
 ### Package Details
 
@@ -132,11 +134,13 @@ corepack --version   # Node.js 24 and older only
 
 ### What Gets Installed
 
-The Node.js package installs to `/usr` with the following binaries:
-- `/usr/bin/node`
-- `/usr/bin/npm`
-- `/usr/bin/npx`
-- `/usr/bin/corepack` (Node.js 24 and older; Node.js 25+ no longer bundles it, install with `npm install -g corepack`)
+The Node.js package installs to `/opt/nodejs-unofficial/` and links these commands into `/usr/local/bin`:
+- `/usr/local/bin/node`
+- `/usr/local/bin/npm`
+- `/usr/local/bin/npx`
+- `/usr/local/bin/corepack` (Node.js 24 and older only)
+
+Node.js 25 and newer no longer bundle corepack. Install it with `sudo npm install -g --prefix /usr/local corepack`: without `--prefix`, npm installs into `/opt/nodejs-unofficial`, whose `bin` directory is not on `PATH`.
 
 ### Package Details
 

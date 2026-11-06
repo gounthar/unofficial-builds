@@ -275,7 +275,10 @@ jobs:
           ln -s /opt/nodejs-unofficial/bin/node package-staging/usr/local/bin/node
           ln -s /opt/nodejs-unofficial/bin/npm package-staging/usr/local/bin/npm
           ln -s /opt/nodejs-unofficial/bin/npx package-staging/usr/local/bin/npx
-          ln -s /opt/nodejs-unofficial/bin/corepack package-staging/usr/local/bin/corepack
+          # Node.js 25+ no longer bundles corepack; only link it when present
+          if [ -e package-staging/opt/nodejs-unofficial/bin/corepack ]; then
+            ln -s /opt/nodejs-unofficial/bin/corepack package-staging/usr/local/bin/corepack
+          fi
 
           # Create profile.d script for MANPATH
           cat > package-staging/etc/profile.d/nodejs-unofficial.sh <<'EOF'
@@ -290,7 +293,7 @@ jobs:
             -v "${VERSION_NO_V}" \
             --iteration 1 \
             --architecture riscv64 \
-            --description "Node.js JavaScript runtime - RISC-V 64-bit native build (unofficial)\nThis package installs Node.js to /opt/nodejs-unofficial/ and does not conflict with system Node.js packages.\nIncludes: node, npm, npx, and corepack" \
+            --description "Node.js JavaScript runtime - RISC-V 64-bit native build (unofficial)\nThis package installs Node.js to /opt/nodejs-unofficial/ and does not conflict with system Node.js packages.\nIncludes: node, npm, npx (and corepack on Node.js 24 and older)" \
             --url "https://github.com/${{ github.repository }}" \
             --license "MIT" \
             --maintainer "Bruno Verachten <https://github.com/gounthar>" \
@@ -495,7 +498,7 @@ jobs:
           - \`/usr/local/bin/node\` → \`/opt/nodejs-unofficial/bin/node\`
           - \`/usr/local/bin/npm\` → \`/opt/nodejs-unofficial/bin/npm\`
           - \`/usr/local/bin/npx\` → \`/opt/nodejs-unofficial/bin/npx\`
-          - \`/usr/local/bin/corepack\` → \`/opt/nodejs-unofficial/bin/corepack\`
+          - \`/usr/local/bin/corepack\` → \`/opt/nodejs-unofficial/bin/corepack\` (Node.js 24 and older only; on 25+ run \`npm install -g corepack\`)
 
           **Man Pages:** Available via \`/etc/profile.d/nodejs-unofficial.sh\` (sets MANPATH)
 

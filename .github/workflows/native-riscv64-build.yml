@@ -498,7 +498,7 @@ jobs:
           - \`/usr/local/bin/node\` → \`/opt/nodejs-unofficial/bin/node\`
           - \`/usr/local/bin/npm\` → \`/opt/nodejs-unofficial/bin/npm\`
           - \`/usr/local/bin/npx\` → \`/opt/nodejs-unofficial/bin/npx\`
-          - \`/usr/local/bin/corepack\` → \`/opt/nodejs-unofficial/bin/corepack\` (Node.js 24 and older only; on 25+ run \`npm install -g corepack\`)
+          - \`/usr/local/bin/corepack\` → \`/opt/nodejs-unofficial/bin/corepack\` (Node.js 24 and older only; on 25+ run \`sudo npm install -g --prefix /usr/local corepack\`)
 
           **Man Pages:** Available via \`/etc/profile.d/nodejs-unofficial.sh\` (sets MANPATH)
 

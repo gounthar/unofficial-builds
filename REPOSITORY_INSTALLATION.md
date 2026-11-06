@@ -37,7 +37,7 @@ sudo apt install nodejs
 node --version
 npm --version
 npx --version
-corepack --version
+corepack --version   # Node.js 24 and older only
 ```
 
 ### What Gets Installed
@@ -46,7 +46,7 @@ The Node.js package installs to `/usr` with the following binaries:
 - `/usr/bin/node`
 - `/usr/bin/npm`
 - `/usr/bin/npx`
-- `/usr/bin/corepack`
+- `/usr/bin/corepack` (Node.js 24 and older; Node.js 25+ no longer bundles it, install with `npm install -g corepack`)
 
 ### Package Details
 
@@ -127,7 +127,7 @@ sudo dnf install nodejs
 node --version
 npm --version
 npx --version
-corepack --version
+corepack --version   # Node.js 24 and older only
 ```
 
 ### What Gets Installed
@@ -136,7 +136,7 @@ The Node.js package installs to `/usr` with the following binaries:
 - `/usr/bin/node`
 - `/usr/bin/npm`
 - `/usr/bin/npx`
-- `/usr/bin/corepack`
+- `/usr/bin/corepack` (Node.js 24 and older; Node.js 25+ no longer bundles it, install with `npm install -g corepack`)
 
 ### Package Details
 

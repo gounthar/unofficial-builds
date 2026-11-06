@@ -25,7 +25,8 @@ architecture on actual riscv64 hardware (Banana Pi F3).
 
 This is an unofficial build that installs to /opt/nodejs-unofficial/ and
 creates symlinks in /usr/local/bin/ to avoid conflicts with system Node.js
-packages. Includes node, npm, npx, and corepack.
+packages. Includes node, npm and npx, plus corepack on Node.js releases
+that still bundle it (v24 and older).
 
 %prep
 %setup -q -n node-v%{version}-linux-riscv64
@@ -46,7 +47,6 @@ install -d %{buildroot}/etc/profile.d
 install -p -m 0755 bin/node %{buildroot}/opt/nodejs-unofficial/bin/node
 install -p -m 0755 bin/npm %{buildroot}/opt/nodejs-unofficial/bin/npm
 install -p -m 0755 bin/npx %{buildroot}/opt/nodejs-unofficial/bin/npx
-install -p -m 0755 bin/corepack %{buildroot}/opt/nodejs-unofficial/bin/corepack
 
 cp -pr lib/* %{buildroot}/opt/nodejs-unofficial/lib/node_modules/
 cp -pr include/* %{buildroot}/opt/nodejs-unofficial/include/
@@ -56,7 +56,15 @@ cp -pr share/man/man1/* %{buildroot}/opt/nodejs-unofficial/share/man/man1/
 ln -s /opt/nodejs-unofficial/bin/node %{buildroot}/usr/local/bin/node
 ln -s /opt/nodejs-unofficial/bin/npm %{buildroot}/usr/local/bin/npm
 ln -s /opt/nodejs-unofficial/bin/npx %{buildroot}/usr/local/bin/npx
-ln -s /opt/nodejs-unofficial/bin/corepack %{buildroot}/usr/local/bin/corepack
+
+# Node.js 25+ no longer bundles corepack, so ship it only when the tarball has it.
+# The generated list always holds the profile.d script: rpmbuild rejects an empty %files -f list.
+echo /etc/profile.d/nodejs-unofficial.sh > extra.files
+if [ -e bin/corepack ]; then
+  install -p -m 0755 bin/corepack %{buildroot}/opt/nodejs-unofficial/bin/corepack
+  ln -s /opt/nodejs-unofficial/bin/corepack %{buildroot}/usr/local/bin/corepack
+  echo /usr/local/bin/corepack >> extra.files
+fi
 
 # Create profile.d script for MANPATH
 cat > %{buildroot}/etc/profile.d/nodejs-unofficial.sh <<'EOF'
@@ -66,18 +74,16 @@ export MANPATH="/opt/nodejs-unofficial/share/man:${MANPATH:-}"
 EOF
 chmod 644 %{buildroot}/etc/profile.d/nodejs-unofficial.sh
 
-%files
+%files -f extra.files
 %license LICENSE
 %doc README.md
 /opt/nodejs-unofficial/
 /usr/local/bin/node
 /usr/local/bin/npm
 /usr/local/bin/npx
-/usr/local/bin/corepack
-/etc/profile.d/nodejs-unofficial.sh
 
 %changelog
-* Wed Nov 13 2025 Bruno Verachten <gounthar@gmail.com> - 24.11.1-1
+* Thu Nov 13 2025 Bruno Verachten <gounthar@gmail.com> - 24.11.1-1
 - Initial RPM packaging for RISC-V64
 - Built natively on Banana Pi F3 hardware
 - Node.js v24.11.1 with --openssl-no-asm flag

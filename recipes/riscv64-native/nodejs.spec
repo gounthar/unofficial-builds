@@ -18,6 +18,11 @@ Conflicts:      nodejs-unofficial-old
 %global _enable_debug_package 0
 %global _build_id_links none
 
+# Keep the upstream `#!/usr/bin/env node` shebangs. Mangling them to
+# /usr/bin/node breaks npm/npx/corepack (node lives in /usr/local/bin) and
+# makes auto-requires demand /usr/bin/node and /usr/bin/pwsh.
+%global __brp_mangle_shebangs %{nil}
+
 %description
 Node.js is a JavaScript runtime built on Chrome's V8 JavaScript engine.
 This package provides Node.js v%{version} built natively for RISC-V64
@@ -35,33 +40,24 @@ that still bundle it (v24 and older).
 # No build needed - pre-built binaries
 
 %install
-# Create necessary directories
-install -d %{buildroot}/opt/nodejs-unofficial/bin
-install -d %{buildroot}/opt/nodejs-unofficial/lib/node_modules
-install -d %{buildroot}/opt/nodejs-unofficial/include
-install -d %{buildroot}/opt/nodejs-unofficial/share/man/man1
+install -d %{buildroot}/opt/nodejs-unofficial
 install -d %{buildroot}/usr/local/bin
 install -d %{buildroot}/etc/profile.d
 
-# Install to /opt/nodejs-unofficial
-install -p -m 0755 bin/node %{buildroot}/opt/nodejs-unofficial/bin/node
-install -p -m 0755 bin/npm %{buildroot}/opt/nodejs-unofficial/bin/npm
-install -p -m 0755 bin/npx %{buildroot}/opt/nodejs-unofficial/bin/npx
-
-cp -pr lib/* %{buildroot}/opt/nodejs-unofficial/lib/node_modules/
-cp -pr include/* %{buildroot}/opt/nodejs-unofficial/include/
-cp -pr share/man/man1/* %{buildroot}/opt/nodejs-unofficial/share/man/man1/
+# Copy the tree as shipped: bin/npm, bin/npx and bin/corepack are relative
+# symlinks into lib/node_modules, so they must stay symlinks and the
+# lib/node_modules layout must not change.
+cp -a bin lib include share %{buildroot}/opt/nodejs-unofficial/
 
 # Create symlinks in /usr/local/bin for PATH (works in all shell types)
 ln -s /opt/nodejs-unofficial/bin/node %{buildroot}/usr/local/bin/node
 ln -s /opt/nodejs-unofficial/bin/npm %{buildroot}/usr/local/bin/npm
 ln -s /opt/nodejs-unofficial/bin/npx %{buildroot}/usr/local/bin/npx
 
-# Node.js 25+ no longer bundles corepack, so ship it only when the tarball has it.
+# Node.js 25+ no longer bundles corepack, so link it only when the tarball has it.
 # The generated list always holds the profile.d script: rpmbuild rejects an empty %files -f list.
 echo /etc/profile.d/nodejs-unofficial.sh > extra.files
 if [ -e bin/corepack ]; then
-  install -p -m 0755 bin/corepack %{buildroot}/opt/nodejs-unofficial/bin/corepack
   ln -s /opt/nodejs-unofficial/bin/corepack %{buildroot}/usr/local/bin/corepack
   echo /usr/local/bin/corepack >> extra.files
 fi

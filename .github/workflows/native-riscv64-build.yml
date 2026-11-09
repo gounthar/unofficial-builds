@@ -198,6 +198,33 @@ jobs:
               -e 's/__ FloatMinMaxHelper<double>(out, left, right, MaxMinKind::kMax);/__ Float64Max(out, left, right);/' \
               deps/v8/src/maglev/riscv/maglev-ir-riscv.cc
           fi
+          # V8 RVV LMUL fixes (nodejs/node#64538): with VLEN 256 (SpaceMiT K1/K3) V8
+          # picks the reserved e64,mf2 vtype and npm dies with SIGILL. Source hunks of
+          # V8 634bfd45341b, cac8aa44a153 and 5cbd9b7e4f96, applied as one series:
+          # skipped when the tree already has the fix, rolled back with a warning when
+          # any of them does not apply (older V8).
+          V8_ASM=deps/v8/src/codegen/riscv/assembler-riscv.h
+          if [ ! -f "${V8_ASM}" ] || grep -q MinimumLmulForTargetBits "${V8_ASM}"; then
+            echo "V8 LMUL fix: already present or not applicable"
+          else
+            applied=()
+            for p in "${GITHUB_WORKSPACE}"/recipes/riscv64-native/v8-patches/*.patch; do
+              if patch -d deps/v8 -p1 --dry-run -s -f < "$p" >/dev/null 2>&1; then
+                patch -d deps/v8 -p1 -s -f --no-backup-if-mismatch < "$p"
+                applied=("$p" "${applied[@]}")
+              else
+                echo "::warning::V8 patch $(basename "$p") does not apply to ${VERSION}; LMUL fix not applied"
+                for r in "${applied[@]}"; do
+                  patch -d deps/v8 -p1 -R -s -f --no-backup-if-mismatch < "$r"
+                done
+                applied=()
+                break
+              fi
+            done
+            if [ "${#applied[@]}" -gt 0 ]; then
+              echo "V8 LMUL fix: applied ${#applied[@]} patches"
+            fi
+          fi
           export CCACHE_DIR="${BUILD_DIR}/ccache"
           export CCACHE_MAXSIZE="5G"
 
@@ -235,6 +262,19 @@ jobs:
           if ls node-*.tar.?z 1> /dev/null 2>&1; then
             echo "Build completed successfully!"
             ls -lh node-*.tar.?z
+
+            # npm runs JIT-compiled regexps that plain `node -e` does not reach; a
+            # build that passes `node --version` can still SIGILL here (nodejs/node#64538).
+            SMOKE_DIR="$(mktemp -d)"
+            tar -xJf "node-${VERSION}-linux-riscv64.tar.xz" -C "${SMOKE_DIR}" --strip-components=1
+            for i in 1 2 3; do
+              PATH="${SMOKE_DIR}/bin:/usr/bin:/bin" "${SMOKE_DIR}/bin/npm" --version || {
+                echo "::error::npm --version failed (run ${i}) on the built tarball"
+                rm -rf "${SMOKE_DIR}"
+                exit 1
+              }
+            done
+            rm -rf "${SMOKE_DIR}"
 
             # Copy binaries to workflow workspace
             mkdir -p "${GITHUB_WORKSPACE}/staging/release/${VERSION}"

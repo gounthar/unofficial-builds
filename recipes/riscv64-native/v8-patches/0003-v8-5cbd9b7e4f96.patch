@@ -1,0 +1,177 @@
+From 5cbd9b7e4f968ae0d32b55360940b72797b6d916 Mon Sep 17 00:00:00 2001
+From: Stewart Addison <sxa@ibm.com>
+Date: Fri, 30 Oct 2026 19:46:01 +0800
+Subject: [PATCH] [riscv] Allow vlen=1024
+
+This resolves the remaining crashes observed in Node.js at
+https://github.com/nodejs/node/issues/64538 allowing execution on
+systems with vlen=1024 such as the K3's A100 cores including raising
+kMaxRvvVLEN from 512 to 1024.  the code has a refactored helper
+function to abstract out some of the changes across the SetSimd*
+functions.  The changes to the tests allow them to pass successfully in
+vlen=1024 environment with functionality for lower vlen's unaffected.
+
+Test: Run the code snippet from
+https://github.com/nodejs/node/issues/64538#issuecomment-5328340054 -
+it will give an illegal exception on a system with a vlen of 1024
+without this patch.  If someone else can test it on other systems that
+would be good as I have only verified it on the K3's vlen=256 and
+vlen=1024 cores (and also by building Node.js with these changes and
+verifying that npm no longer crashes).
+
+The main functional piece of the patch is quite small, but there have
+been a number of changes to the unit tests required to support this
+which are included in this CL.  The updated tests have been executed on
+vlen sizes of 256 and 1024 and pass.
+
+This patch was assisted by cursor AI.
+
+R=yahan@iscas.ac.cn
+
+Signed-off-by: Stewart Addison <sxa@ibm.com>
+Change-Id: I752f9ae23d3e605dbcf5bd8d97d104b0a788e5c6
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/8585179
+Reviewed-by: Ji Qiu <qiuji@iscas.ac.cn>
+Reviewed-by: Yahan Lu (LuYahan) <yahan@iscas.ac.cn>
+Commit-Queue: Ji Qiu <qiuji@iscas.ac.cn>
+Cr-Commit-Position: refs/heads/main@{#111579}
+---
+ src/codegen/riscv/assembler-riscv.h           |  94 ++---
+ src/codegen/riscv/base-constants-riscv.h      |   2 +-
+ .../assembler/assembler-riscv32-unittest.cc   |   2 +-
+ .../assembler/assembler-riscv64-unittest.cc   | 334 +++++++++++-------
+ 4 files changed, 248 insertions(+), 184 deletions(-)
+
+diff --git a/src/codegen/riscv/assembler-riscv.h b/src/codegen/riscv/assembler-riscv.h
+index 67f363093a29..e7efbdcd8d08 100644
+--- a/src/codegen/riscv/assembler-riscv.h
++++ b/src/codegen/riscv/assembler-riscv.h
+@@ -630,30 +630,44 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase,
+       return (avl_ == expected_avl);
+     }
+ 
+-    void SetSimd128(VSew sew, TailAgnosticType tail = ta) {
+-      Vlmul lmul;
+-      // Just support riscv zve64x now.
+-      // ELEN * LMUL >= SEW
+-      //  --> 2^(elen + 3) * 2^(-n) >= 2^(sew + 3)
+-      //  --> elen >= sew + n
+-      // mf2 -> n is 1.
+-      // mf4 -> n is 2.
+-      // mf8 -> n is 3.
+-      DCHECK_EQ(kRvvELEN, 64);
+-      switch (CpuFeatures::vlen()) {
+-        case 128:
+-          lmul = m1;
+-          break;
+-        case 256:
+-          lmul = (sew + 1) > E64 ? m1 : mf2;
+-          break;
+-        case 512:
+-          lmul = (sew + 2) > E64 ? m1 : mf4;
+-          break;
+-        default:
+-          static_assert(kMaxRvvVLEN <= 512, "Unsupported VLEN");
+-          UNIMPLEMENTED();
++    static Vlmul MinimumLmulForTargetBits(int target_bits, VSew sew) {
++      const int vlen = CpuFeatures::vlen();
++      DCHECK(vlen >= 128 && vlen <= kMaxRvvVLEN && (vlen % 128) == 0);
++      const int sew_bits = 8 << static_cast<int>(sew);
++      // LMUL must satisfy RVV 1.0: LMUL * ELEN >= SEW and VLMAX >= avl, where
++      // avl = target_bits / SEW. Equivalently, LMUL >= max(SEW / ELEN,
++      // target_bits / VLEN).
++      const int64_t req_num_from_sew = sew_bits;
++      const int64_t req_den_from_sew = kRvvELEN;
++      const int64_t req_num_from_vlen = target_bits;
++      const int64_t req_den_from_vlen = vlen;
++      int64_t req_num;
++      int64_t req_den;
++      if (req_num_from_sew * req_den_from_vlen >=
++          req_num_from_vlen * req_den_from_sew) {
++        req_num = req_num_from_sew;
++        req_den = req_den_from_sew;
++      } else {
++        req_num = req_num_from_vlen;
++        req_den = req_den_from_vlen;
+       }
++      static constexpr struct {
++        Vlmul lmul;
++        int num;
++        int den;
++      } kOptions[] = {{mf8, 1, 8}, {mf4, 1, 4}, {mf2, 1, 2}, {m1, 1, 1},
++                      {m2, 2, 1},  {m4, 4, 1},  {m8, 8, 1}};
++      for (const auto& option : kOptions) {
++        if (static_cast<int64_t>(option.num) * req_den >=
++            req_num * option.den) {
++          return option.lmul;
++        }
++      }
++      UNREACHABLE();
++    }
++
++    void SetSimd128(VSew sew, TailAgnosticType tail = ta) {
++      Vlmul lmul = MinimumLmulForTargetBits(128, sew);
+       if (sew == E8) {
+         set(16, sew, lmul, tail);
+       } else if (sew == E16) {
+@@ -668,22 +682,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase,
+     }
+ 
+     void SetSimd128Half(VSew sew, TailAgnosticType tail = ta) {
+-      Vlmul lmul;
+-      DCHECK_EQ(kRvvELEN, 64);
+-      switch (CpuFeatures::vlen()) {
+-        case 128:
+-          lmul = (sew + 1) > E64 ? m1 : mf2;
+-          break;
+-        case 256:
+-          lmul = (sew + 2) > E64 ? (sew == E32 ? mf2 : m1) : mf4;
+-          break;
+-        case 512:
+-          lmul = (sew + 3) > E64 ? (sew <= E32 ? mf2 : m1) : mf8;
+-          break;
+-        default:
+-          static_assert(kMaxRvvVLEN <= 512, "Unsupported VLEN");
+-          UNIMPLEMENTED();
+-      }
++      Vlmul lmul = MinimumLmulForTargetBits(64, sew);
+       if (sew == E8) {
+         set(8, sew, lmul, tail);
+       } else if (sew == E16) {
+@@ -698,22 +697,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase,
+     }
+ 
+     void SetSimd128x2(VSew sew, TailAgnosticType tail = ta) {
+-      Vlmul lmul;
+-      DCHECK_EQ(kRvvELEN, 64);
+-      switch (CpuFeatures::vlen()) {
+-        case 128:
+-          lmul = m2;
+-          break;
+-        case 256:
+-          lmul = m1;
+-          break;
+-        case 512:
+-          lmul = (sew + 1) > E64 ? m1 : mf2;
+-          break;
+-        default:
+-          static_assert(kMaxRvvVLEN <= 512, "Unsupported VLEN");
+-          UNIMPLEMENTED();
+-      }
++      Vlmul lmul = MinimumLmulForTargetBits(256, sew);
+       if (sew == E8) {
+         set(32, sew, lmul, tail);
+       } else if (sew == E16) {
+diff --git a/src/codegen/riscv/base-constants-riscv.h b/src/codegen/riscv/base-constants-riscv.h
+index 958da80c2a34..5baeabcde334 100644
+--- a/src/codegen/riscv/base-constants-riscv.h
++++ b/src/codegen/riscv/base-constants-riscv.h
+@@ -340,7 +340,7 @@ constexpr int kRvvELEN = 64;
+ // Maximum supported VLEN in bits.
+ // Code that could fail with larger VLEN should static_assert against this
+ // constant.
+-constexpr int kMaxRvvVLEN = 512;
++constexpr int kMaxRvvVLEN = 1024;
+ 
+ #if V8_TARGET_ARCH_RISCV64
+ constexpr int kRvXLEN = 64;

@@ -245,6 +245,11 @@ jobs:
           fi
           export CCACHE_DIR="${BUILD_DIR}/ccache"
           export CCACHE_MAXSIZE="5G"
+          # The compile lines carry absolute -I/-MF paths, and ccache hashes
+          # them unless they sit under base_dir. Resolve symlinks, since make
+          # sees the real path: moving the build dir otherwise empties the cache.
+          CCACHE_BASEDIR="$(realpath "${BUILD_DIR}/staging")"
+          export CCACHE_BASEDIR
 
           # Show ccache stats before build
           echo "=== ccache stats before build ==="

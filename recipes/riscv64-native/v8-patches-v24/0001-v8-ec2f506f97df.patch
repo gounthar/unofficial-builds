@@ -1,0 +1,66 @@
+From ec2f506f97dfbb5fa19e4fe9103965a3c94690af Mon Sep 17 00:00:00 2001
+From: Lu Yahan <yahan@iscas.ac.cn>
+Date: Wed May 28 09:10:49 2025
+Subject: [PATCH] [riscv][sandbox] Make sure we have a valid dispatch handle in optimized code
+
+Change-Id: I5efc72bbab79c9dec301c496aaf559f74819f37c
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6596491
+Reviewed-by: Ji Qiu <qiuji@iscas.ac.cn>
+Commit-Queue: Ji Qiu <qiuji@iscas.ac.cn>
+Auto-Submit: Yahan Lu (LuYahan) <yahan@iscas.ac.cn>
+Cr-Commit-Position: refs/heads/main@{#100571}
+---
+diff --git a/src/codegen/riscv/macro-assembler-riscv.cc b/src/codegen/riscv/macro-assembler-riscv.cc
+index 68b6bcb..d78d392 100644
+--- a/src/codegen/riscv/macro-assembler-riscv.cc
++++ b/src/codegen/riscv/macro-assembler-riscv.cc
+@@ -182,8 +182,9 @@
+ 
+ void MacroAssembler::GenerateTailCallToReturnedCode(
+     Runtime::FunctionId function_id) {
++  ASM_CODE_COMMENT(this);
+   // ----------- S t a t e -------------
+-  //  -- a0 : actual argument count
++  //  -- a0 : actual argument count (preserved for callee)
+   //  -- a1 : target function (preserved for callee)
+   //  -- a3 : new target (preserved for callee)
+   //  -- a4 : dispatch handle (preserved for callee)
+@@ -194,26 +195,27 @@
+     // argument count, and the dispatch handle.
+     // Push function as parameter to the runtime call.
+     SmiTag(kJavaScriptCallArgCountRegister);
+-#if defined(V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE) && \
+-    defined(V8_TARGET_ARCH_RISCV64)
+-    // No need to SmiTag as dispatch handles always look like Smis.
++    Push(kJavaScriptCallTargetRegister, kJavaScriptCallNewTargetRegister,
++         kJavaScriptCallArgCountRegister);
++#ifdef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
++    // No need to SmiTag since dispatch handles always look like Smis.
+     static_assert(kJSDispatchHandleShift > 0);
+     AssertSmi(kJavaScriptCallDispatchHandleRegister);
+     Push(kJavaScriptCallDispatchHandleRegister);
+ #endif
+-    Push(kJavaScriptCallTargetRegister, kJavaScriptCallNewTargetRegister,
+-         kJavaScriptCallArgCountRegister);
++    // Function is also the parameter to the runtime call.
++    Push(kJavaScriptCallTargetRegister);
+ 
+     CallRuntime(function_id, 1);
+-    // Use the return value before restoring a0
+     LoadCodeInstructionStart(a2, a0, kJSEntrypointTag);
+-    // Restore target function, new target and actual argument count.
+-    Pop(kJavaScriptCallTargetRegister, kJavaScriptCallNewTargetRegister,
+-        kJavaScriptCallArgCountRegister);
+-#if defined(V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE) && \
+-    defined(V8_TARGET_ARCH_RISCV64)
++
++    // Restore target function, new target, actual argument count and dispatch
++    // handle.
++#ifdef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
+     Pop(kJavaScriptCallDispatchHandleRegister);
+ #endif
++    Pop(kJavaScriptCallTargetRegister, kJavaScriptCallNewTargetRegister,
++        kJavaScriptCallArgCountRegister);
+     SmiUntag(kJavaScriptCallArgCountRegister);
+   }
+ 

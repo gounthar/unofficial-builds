@@ -225,6 +225,24 @@ jobs:
               echo "V8 LMUL fix: applied ${#applied[@]} patches"
             fi
           fi
+          # V8 ec2f506f97df: GenerateTailCallToReturnedCode pushed the dispatch handle
+          # as the runtime call's parameter instead of the target function, so v24.x
+          # segfaults as soon as optimized code runs (npm --version, node -e). Kept out
+          # of the LMUL series above on purpose: that loop is all-or-nothing, and this
+          # patch does not apply to v26 (already fixed there) or v22 (no dispatch
+          # handle in that V8), which would roll the LMUL fixes back.
+          V8_MASM=deps/v8/src/codegen/riscv/macro-assembler-riscv.cc
+          V8_EC2F="${GITHUB_WORKSPACE}/recipes/riscv64-native/v8-patches-v24/0001-v8-ec2f506f97df.patch"
+          if [ ! -f "${V8_MASM}" ] || ! grep -q V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE "${V8_MASM}"; then
+            echo "V8 ec2f506f97df: not applicable (no dispatch handle in this V8)"
+          elif patch -d deps/v8 -p1 -R --dry-run -s -f < "${V8_EC2F}" >/dev/null 2>&1; then
+            echo "V8 ec2f506f97df: already present"
+          elif patch -d deps/v8 -p1 --dry-run -s -f < "${V8_EC2F}" >/dev/null 2>&1; then
+            patch -d deps/v8 -p1 -s -f --no-backup-if-mismatch < "${V8_EC2F}"
+            echo "V8 ec2f506f97df: applied"
+          else
+            echo "::warning::V8 ec2f506f97df does not apply to ${VERSION}; JIT may segfault on riscv64"
+          fi
           export CCACHE_DIR="${BUILD_DIR}/ccache"
           export CCACHE_MAXSIZE="5G"
 

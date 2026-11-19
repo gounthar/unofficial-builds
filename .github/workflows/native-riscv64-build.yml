@@ -598,16 +598,23 @@ jobs:
             fi
           fi
 
-          # Create release
+          # Create release. The build log carries the build-time line; the
+          # copy into staging is `|| true`, so attach it only if it is there.
+          STAGE="${GITHUB_WORKSPACE}/staging/release/${VERSION}"
+          EXTRA_ASSETS=()
+          if [ -f "${STAGE}/build-${VERSION}.log" ]; then
+            EXTRA_ASSETS+=("${STAGE}/build-${VERSION}.log")
+          fi
           gh release create "${VERSION}" \
             --repo ${{ github.repository }} \
             --title "Node.js ${VERSION} for RISC-V 64" \
             --notes-file release_notes.md \
-            ${GITHUB_WORKSPACE}/staging/release/${VERSION}/node-*.tar.gz \
-            ${GITHUB_WORKSPACE}/staging/release/${VERSION}/node-*.tar.xz \
-            ${GITHUB_WORKSPACE}/staging/release/${VERSION}/nodejs-unofficial_*.deb \
-            ${GITHUB_WORKSPACE}/staging/release/${VERSION}/nodejs-unofficial-*.rpm \
-            ${GITHUB_WORKSPACE}/staging/release/${VERSION}/SHASUMS256.txt
+            ${STAGE}/node-*.tar.gz \
+            ${STAGE}/node-*.tar.xz \
+            ${STAGE}/nodejs-unofficial_*.deb \
+            ${STAGE}/nodejs-unofficial-*.rpm \
+            ${STAGE}/SHASUMS256.txt \
+            "${EXTRA_ASSETS[@]}"
 
           echo "Release ${VERSION} created successfully!"
 
@@ -661,7 +668,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-log-${{ matrix.version }}
-          path: ${GITHUB_WORKSPACE}/staging/release/${{ matrix.version }}/build.log
+          # `with:` does not expand shell variables, so this takes the log
+          # from where the build writes it. That also covers failed builds,
+          # which never copy it into staging.
+          path: ~/${{ env.BUILD_DIR }}/logs/build-${{ matrix.version }}.log
           if-no-files-found: ignore
           retention-days: 30
 

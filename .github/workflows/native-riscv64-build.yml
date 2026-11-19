@@ -268,14 +268,22 @@ jobs:
           # re-runs ./configure internally and uses $(CONFIG_FLAGS) for that
           # inner invocation. Without it, OpenSSL re-enables x86 asm and gcc
           # fails on riscv64 with: unrecognized command-line option '-m64'.
-          echo "Starting Node.js build..."
-          time make -j$(nproc) binary V= \
-            DESTCPU="riscv64" \
-            ARCH="riscv64" \
-            VARIATION="" \
-            DISTTYPE="release" \
-            CONFIG_FLAGS="--openssl-no-asm" \
-            2>&1 | tee -a "${BUILD_DIR}/logs/build-${VERSION}.log"
+          #
+          # `time` reports to the shell's stderr, which a bare `time make | tee`
+          # leaves outside the pipe: the figures only reached the step log,
+          # which GitHub truncates on a build this long. Inside the group they
+          # go through tee into the build log shipped with the release.
+          # CPU time is user + sys.
+          echo "Starting Node.js build on $(hostname) (native riscv64, $(nproc) cores)..." \
+            | tee -a "${BUILD_DIR}/logs/build-${VERSION}.log"
+          TIMEFORMAT="build-time: wall %3lR, user %3lU, sys %3lS, cpu %P%%"
+          { time make -j$(nproc) binary V= \
+              DESTCPU="riscv64" \
+              ARCH="riscv64" \
+              VARIATION="" \
+              DISTTYPE="release" \
+              CONFIG_FLAGS="--openssl-no-asm" \
+              2>&1 ; } 2>&1 | tee -a "${BUILD_DIR}/logs/build-${VERSION}.log"
 
           # Show ccache stats after build
           echo "=== ccache stats after build ==="

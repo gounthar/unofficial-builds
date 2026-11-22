@@ -49,6 +49,11 @@ jobs:
           else
             # Check for new releases from nodejs.org
             # Column 1: version, Column 10: lts (codename or "-")
+            # index.tab is sorted newest version first, so the first row seen
+            # for each major is that major's newest release. Keep one per major
+            # and only the three newest majors: a plain `head -5` returned five
+            # rows of the two newest majors (older patches included) and never
+            # reached v22, while dropping the cap would rebuild EOL lines.
             # For scheduled runs, always use LTS only. For manual runs, use input parameter.
             if [ "${{ github.event_name }}" = "schedule" ]; then
               LTS_ONLY="true"
@@ -59,15 +64,15 @@ jobs:
             if [ "$LTS_ONLY" = "true" ]; then
               echo "Checking for LTS versions only..."
               LATEST_RELEASES=$(curl -sL https://nodejs.org/download/release/index.tab | \
-                awk 'NR>1 && $10 != "-" {print $1}' | \
+                awk 'NR>1 && $10 != "-" {split($1, a, "."); if (!(a[1] in seen)) {seen[a[1]] = 1; print $1}}' | \
                 grep -E '^v(2[0-9]|[3-9][0-9])\.' | \
-                head -5)
+                head -3)
             else
               echo "Checking for all versions..."
               LATEST_RELEASES=$(curl -sL https://nodejs.org/download/release/index.tab | \
-                awk 'NR>1 {print $1}' | \
+                awk 'NR>1 {split($1, a, "."); if (!(a[1] in seen)) {seen[a[1]] = 1; print $1}}' | \
                 grep -E '^v(2[0-9]|[3-9][0-9])\.' | \
-                head -5)
+                head -3)
             fi
 
             # Get existing releases from this repo
@@ -495,6 +500,12 @@ jobs:
             echo "Release ${VERSION} exists but force_rebuild=true - will replace after building packages"
           fi
 
+          # The RPM name carries the Fedora release (fc41, ...). curl does not
+          # expand `*`, so the install command needs the real file name.
+          STAGE="${GITHUB_WORKSPACE}/staging/release/${VERSION}"
+          RPM_NAME=$(basename "$(ls "${STAGE}"/nodejs-unofficial-*.rpm 2>/dev/null | head -1)")
+          RPM_NAME="${RPM_NAME:-nodejs-unofficial-${VERSION#v}-1.fc41.riscv64.rpm}"
+
           # Create release notes
           cat > release_notes.md <<EOF
           # Node.js ${VERSION} - Native RISC-V 64 Build
@@ -527,8 +538,8 @@ jobs:
 
           \`\`\`bash
           # Download and install .rpm package
-          curl -LO https://github.com/${{ github.repository }}/releases/download/${VERSION}/nodejs-unofficial-${VERSION#v}-1.fc*.riscv64.rpm
-          sudo dnf install ./nodejs-unofficial-${VERSION#v}-1.fc*.riscv64.rpm
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${VERSION}/${RPM_NAME}
+          sudo dnf install ./${RPM_NAME}
 
           # Verify installation (works immediately via /usr/local/bin symlinks)
           node --version
@@ -539,11 +550,11 @@ jobs:
 
           \`\`\`bash
           # Download and extract
-          curl -LO https://github.com/${{ github.repository }}/releases/download/${VERSION}/node-${VERSION#v}-linux-riscv64.tar.xz
-          tar -xJf node-${VERSION#v}-linux-riscv64.tar.xz
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${VERSION}/node-${VERSION}-linux-riscv64.tar.xz
+          tar -xJf node-${VERSION}-linux-riscv64.tar.xz
 
           # Add to PATH or install to /usr/local
-          sudo cp -r node-${VERSION#v}-linux-riscv64/* /usr/local/
+          sudo cp -r node-${VERSION}-linux-riscv64/* /usr/local/
 
           # Verify
           node --version
@@ -552,9 +563,9 @@ jobs:
           ## Available Artifacts
 
           - \`nodejs-unofficial_${VERSION#v}-1_riscv64.deb\` - Debian package (installs to /opt/nodejs-unofficial/)
-          - \`nodejs-unofficial-${VERSION#v}-1.fc*.riscv64.rpm\` - RPM package (installs to /opt/nodejs-unofficial/)
-          - \`node-${VERSION#v}-linux-riscv64.tar.gz\` - Gzipped tarball
-          - \`node-${VERSION#v}-linux-riscv64.tar.xz\` - XZ compressed tarball
+          - \`${RPM_NAME}\` - RPM package (installs to /opt/nodejs-unofficial/)
+          - \`node-${VERSION}-linux-riscv64.tar.gz\` - Gzipped tarball
+          - \`node-${VERSION}-linux-riscv64.tar.xz\` - XZ compressed tarball
           - \`SHASUMS256.txt\` - SHA256 checksums for all artifacts
 
           ## Package Details
@@ -598,9 +609,25 @@ jobs:
             fi
           fi
 
+          # Mark Latest only when this is the highest plain vX.Y.Z version in
+          # the repo. gh otherwise marks the newest-created release Latest, so
+          # a v22 patch built after v26 took the label from it.
+          # If the lookup fails, do not guess: create the release without
+          # Latest rather than fail the step and lose a 12-hour build.
+          LATEST_FLAG="--latest=false"
+          if RELEASE_TAGS=$(gh release list --repo "${{ github.repository }}" --limit 200 --json tagName -q '.[].tagName'); then
+            HIGHEST=$( { echo "${RELEASE_TAGS}"; echo "${VERSION}"; } | \
+              grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+            if [ "${HIGHEST}" = "${VERSION}" ]; then
+              LATEST_FLAG="--latest"
+            fi
+            echo "Highest release is ${HIGHEST}: creating ${VERSION} with ${LATEST_FLAG}"
+          else
+            echo "::warning::Could not list releases; creating ${VERSION} with --latest=false. Check the Latest label by hand."
+          fi
+
           # Create release. The build log carries the build-time line; the
           # copy into staging is `|| true`, so attach it only if it is there.
-          STAGE="${GITHUB_WORKSPACE}/staging/release/${VERSION}"
           EXTRA_ASSETS=()
           if [ -f "${STAGE}/build-${VERSION}.log" ]; then
             EXTRA_ASSETS+=("${STAGE}/build-${VERSION}.log")
@@ -609,6 +636,7 @@ jobs:
             --repo ${{ github.repository }} \
             --title "Node.js ${VERSION} for RISC-V 64" \
             --notes-file release_notes.md \
+            "${LATEST_FLAG}" \
             ${STAGE}/node-*.tar.gz \
             ${STAGE}/node-*.tar.xz \
             ${STAGE}/nodejs-unofficial_*.deb \

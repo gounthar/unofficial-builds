@@ -612,14 +612,19 @@ jobs:
           # Mark Latest only when this is the highest plain vX.Y.Z version in
           # the repo. gh otherwise marks the newest-created release Latest, so
           # a v22 patch built after v26 took the label from it.
-          HIGHEST=$( { gh release list --repo ${{ github.repository }} --limit 200 --json tagName -q '.[].tagName'; echo "${VERSION}"; } | \
-            grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
-          if [ "${HIGHEST}" = "${VERSION}" ]; then
-            LATEST_FLAG="--latest"
+          # If the lookup fails, do not guess: create the release without
+          # Latest rather than fail the step and lose a 12-hour build.
+          LATEST_FLAG="--latest=false"
+          if RELEASE_TAGS=$(gh release list --repo "${{ github.repository }}" --limit 200 --json tagName -q '.[].tagName'); then
+            HIGHEST=$( { echo "${RELEASE_TAGS}"; echo "${VERSION}"; } | \
+              grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+            if [ "${HIGHEST}" = "${VERSION}" ]; then
+              LATEST_FLAG="--latest"
+            fi
+            echo "Highest release is ${HIGHEST}: creating ${VERSION} with ${LATEST_FLAG}"
           else
-            LATEST_FLAG="--latest=false"
+            echo "::warning::Could not list releases; creating ${VERSION} with --latest=false. Check the Latest label by hand."
           fi
-          echo "Highest release is ${HIGHEST}: creating ${VERSION} with ${LATEST_FLAG}"
 
           # Create release. The build log carries the build-time line; the
           # copy into staging is `|| true`, so attach it only if it is there.
